@@ -23,6 +23,7 @@ import { getBombTheme } from '../config/BombVisualThemes';
 import { getMapTheme } from '../config/MapThemes';
 import { MapRenderer } from '../systems/MapRenderer';
 import { AudioSystem } from '../systems/AudioSystem';
+import { MatchTelemetrySystem } from '../systems/MatchTelemetrySystem';
 import { BombViewSystem } from '../systems/BombViewSystem';
 import { TouchController } from '../controllers/TouchController';
 
@@ -819,6 +820,18 @@ export class GameScene extends Phaser.Scene {
     this.bombViews.cleanup();
     AudioSystem.get().sfx(won ? 'victory' : 'loss');
     const reward = awardMatch(this.player, won, this.mode.elapsedMs);
+    MatchTelemetrySystem.record({
+      map: SESSION.map,
+      mode: SESSION.mode,
+      champion: this.player.character,
+      won,
+      reason,
+      elapsedMs: this.mode.elapsedMs,
+      kills: this.player.kills,
+      shards: this.player.shards,
+      healthRemaining: this.player.stats.health,
+      lastRune: this.player.lastPowerUp
+    });
     this.time.delayedCall(700, () => {
       this.scene.start('ResultsScene', {
         won,
