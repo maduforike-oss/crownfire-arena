@@ -66,12 +66,14 @@ export interface Stats {
   moveSpeed: number;
   invulnerabilityMs: number;
   shielded: boolean;
+  shieldMs: number;
   hasBombKick: boolean;
   hasRemoteDetonator: boolean;
   temporaryGhostMode: number;
   temporarySpeedBoost: number;
   championSurgeMs: number;
   remoteCharges: number;
+  remoteArmedBombs: number;
   nextBombDragonCore: boolean;
   nextBombFrostSnare: boolean;
 }

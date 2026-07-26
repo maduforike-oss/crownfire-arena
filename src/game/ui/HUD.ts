@@ -13,6 +13,7 @@ export class HUD {
   private bots!: Phaser.GameObjects.Text;
   private timer!: Phaser.GameObjects.Text;
   private special!: Phaser.GameObjects.Text;
+  private specialHint!: Phaser.GameObjects.Text;
   private specialBar!: Phaser.GameObjects.Rectangle;
   private powerIcon!: Phaser.GameObjects.Image;
   private powerText!: Phaser.GameObjects.Text;
@@ -44,6 +45,9 @@ export class HUD {
     this.special = this.scene.add.text(130, 341, '', { fontFamily: 'Georgia', fontSize: '15px', color: '#eadcff', align: 'center', wordWrap: { width: 174 } }).setOrigin(0.5);
     this.scene.add.rectangle(130, 373, 164, 5, 0x09080c, 1);
     this.specialBar = this.scene.add.rectangle(48, 373, 164, 5, 0xa974ff, 0.95).setOrigin(0, 0.5);
+    this.specialHint = this.scene.add.text(130, 393, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: '#a99eb4', align: 'center'
+    }).setOrigin(0.5);
 
     this.scene.add.text(130, 421, 'LAST RUNE', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e' }).setOrigin(0.5);
     this.scene.add.circle(130, 486, 46, 0xd8a84e, 0.05).setStrokeStyle(1, 0xd8a84e, 0.35);
@@ -56,7 +60,7 @@ export class HUD {
     this.scene.add.text(1150, 192, 'ACTIVE EFFECTS', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d9b8ff' }).setOrigin(0.5);
     this.activePanel = this.scene.add.container(1150, 220);
     this.scene.add.text(1150, 580, 'CONTROLS', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e' }).setOrigin(0.5);
-    this.scene.add.text(1150, 625, 'WASD  Move\nSPACE  Rune bomb\nSHIFT  Special\nE  Remote hex', {
+    this.scene.add.text(1150, 625, 'WASD  Move\nSPACE  Rune bomb\nSHIFT  Special\nE  Remote hex (armed)', {
       fontFamily: 'Arial', fontSize: '13px', color: '#bdb4a5', align: 'left', lineSpacing: 7
     }).setOrigin(0.5);
   }
@@ -71,8 +75,18 @@ export class HUD {
     this.timer.setText(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
     const cooldown = Math.max(0, player.specialCooldownMs);
     this.special.setText(cooldown > 0 ? `${character.specialName}\n${Math.ceil(cooldown / 1000)}s` : `${character.specialName}\nREADY`);
-    this.specialBar.displayWidth = 164 * (cooldown > 0 ? 1 - Math.min(1, cooldown / 12000) : 1);
+    const cooldownMax = player.character === 'wolf' ? 7000 : player.character === 'raven' ? 8000 : player.character === 'dragon' || player.character === 'frost' ? 10000 : 12000;
+    this.specialBar.displayWidth = 164 * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
     this.specialBar.setFillStyle(cooldown > 0 ? 0x6d4b88 : character.accentColor);
+    this.specialHint.setText(
+      player.character === 'dragon'
+        ? 'FACING LINE  •  RANGE 6'
+        : player.character === 'frost'
+          ? 'MOVE TO LAY ICE  •  5s'
+          : player.character === 'stone'
+            ? 'ABSORBS NEXT HIT  •  10s'
+            : ''
+    );
 
     if (player.lastPowerUp) {
       const power = getPowerUp(player.lastPowerUp);
@@ -102,11 +116,19 @@ export class HUD {
   private renderActiveEffects(player: Player): void {
     this.activePanel.removeAll(true);
     const effects: ActiveEffectViewModel[] = [];
-    if (player.stats.shielded) effects.push({ icon: 'power-stoneguard', label: 'Shield', color: 0xf7d783, charges: 1 });
-    if (player.stats.remoteCharges > 0) effects.push({ icon: 'power-remoteHex', label: 'Remote Hex', color: 0xc050ff, charges: player.stats.remoteCharges });
+    if (player.stats.shielded) effects.push({ icon: 'power-stoneguard', label: 'Shield', color: 0xf7d783, remainingMs: player.stats.shieldMs, description: 'Absorbs the next hit' });
+    if (player.stats.remoteCharges > 0 || player.stats.remoteArmedBombs > 0) effects.push({
+        icon: 'power-remoteHex',
+        label: 'Remote Hex',
+        color: 0xc050ff,
+        charges: player.stats.remoteCharges > 0 ? player.stats.remoteCharges : undefined,
+        description: `E / HEX | ${player.stats.remoteArmedBombs} armed`
+      });
     if (player.stats.temporaryGhostMode > 0) effects.push({ icon: 'power-ghostVeil', label: 'Ghost Veil', color: 0xded8ff, remainingMs: player.stats.temporaryGhostMode });
     if (player.stats.temporarySpeedBoost > 0) effects.push({ icon: 'power-wolfSprint', label: 'Wolf Sprint', color: 0x9ec8ff, remainingMs: player.stats.temporarySpeedBoost });
     if (player.stats.championSurgeMs > 0) effects.push({ icon: 'power-crownSurge', label: 'Champion Surge', color: 0xfff0a0, remainingMs: player.stats.championSurgeMs });
+    if (player.frostTrailMs > 0) effects.push({ icon: 'power-frostSnare', label: 'Ice Feet', color: 0x75d7ff, remainingMs: player.frostTrailMs, description: 'Movement leaves trapping ice' });
+    if (player.snaredMs > 0) effects.push({ icon: 'power-frostSnare', label: 'Icebound', color: 0xd8f7ff, remainingMs: player.snaredMs, description: 'Movement briefly trapped' });
     if (player.stats.nextBombDragonCore) effects.push({ icon: 'power-dragonCore', label: 'Dragon Next', color: 0xff6b2b });
     if (player.stats.nextBombFrostSnare) effects.push({ icon: 'power-frostSnare', label: 'Frost Next', color: 0x75d7ff });
 
@@ -123,7 +145,7 @@ export class HUD {
       const text = this.scene.add.text(-36, y - 9, `${effect.label}${suffix}`, {
         fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: `#${effect.color.toString(16).padStart(6, '0')}`
       });
-      const description = this.scene.add.text(-36, y + 10, effect.remainingMs !== undefined ? 'Temporary enchantment' : effect.charges !== undefined ? 'Charge available' : 'Empowers next bomb', {
+      const description = this.scene.add.text(-36, y + 10, effect.description ?? (effect.remainingMs !== undefined ? 'Temporary enchantment' : effect.charges !== undefined ? 'Charge available' : 'Empowers next bomb'), {
         fontFamily: 'Arial', fontSize: '10px', color: '#9f978b'
       });
       this.activePanel.add([panel, icon, text, description]);

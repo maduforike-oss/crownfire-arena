@@ -15,6 +15,8 @@ export class TouchController {
   private stickPointerId?: number;
   private stickKnob?: Phaser.GameObjects.Arc;
   private stickGlow?: Phaser.GameObjects.Arc;
+  private remoteButton?: Phaser.GameObjects.Container;
+  private remoteLabel?: Phaser.GameObjects.Text;
 
   constructor(private readonly scene: Phaser.Scene) {
     this.visible = scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
@@ -24,7 +26,7 @@ export class TouchController {
     this.createJoystick();
     this.createActionButton(1162, 555, 66, 0xf06a31, 'BOMB', 'bomb');
     this.createActionButton(1080, 628, 54, 0xa974ff, 'POWER', 'special');
-    this.createActionButton(1210, 652, 48, 0x9e70ff, 'HEX', 'remote');
+    this.remoteButton = this.createActionButton(1210, 652, 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
     this.createActionButton(1238, 42, 34, 0xd8a84e, 'II', 'pause');
 
     this.scene.input.on('pointermove', this.moveJoystick, this);
@@ -51,6 +53,13 @@ export class TouchController {
 
   consumePause(): boolean {
     return this.consume('pause');
+  }
+
+  setRemoteAvailable(armedBombs: number): void {
+    const available = armedBombs > 0;
+    this.remoteButton?.setVisible(available);
+    this.remoteLabel?.setText(`HEX\n${armedBombs}`);
+    if (!available) this.pending.delete('remote');
   }
 
   private createJoystick(): void {
@@ -130,7 +139,7 @@ export class TouchController {
       : dy < 0 ? 'up' : 'down';
   }
 
-  private createActionButton(x: number, y: number, radius: number, color: number, labelText: string, action: TouchAction): void {
+  private createActionButton(x: number, y: number, radius: number, color: number, labelText: string, action: TouchAction): Phaser.GameObjects.Container {
     const glow = this.scene.add.circle(x, y, radius + 7, color, 0.08).setStrokeStyle(2, color, 0.52);
     const face = this.scene.add.circle(x, y, radius, 0x11131b, 0.93).setStrokeStyle(3, color, 0.9);
     const label = this.scene.add.text(x, y, labelText, {
@@ -143,7 +152,10 @@ export class TouchController {
       this.scene.tweens.add({ targets: [face, label], scale: 0.9, duration: 65, yoyo: true });
     });
     zone.on('pointerup', () => face.setFillStyle(0x11131b, 0.93));
-    this.root.add([glow, face, label, zone]);
+    const button = this.scene.add.container(0, 0, [glow, face, label, zone]);
+    this.root.add(button);
+    if (action === 'remote') this.remoteLabel = label;
+    return button;
   }
 
   private consume(action: TouchAction): boolean {

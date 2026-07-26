@@ -29,6 +29,7 @@ export interface ActiveEffectViewModel {
   color: number;
   remainingMs?: number;
   charges?: number;
+  description?: string;
 }
 
 export interface VFXTheme {

@@ -270,6 +270,9 @@ export class AnimationSystem {
     } else if (actor.stats.nextBombFrostSnare) {
       color = 0x75d7ff;
       alpha = 0.3;
+    } else if (actor.frostTrailMs > 0 || actor.snaredMs > 0) {
+      color = 0x75d7ff;
+      alpha = actor.snaredMs > 0 ? 0.42 : 0.3;
     } else if (actor.stats.remoteCharges > 0) {
       color = 0xc050ff;
       alpha = 0.26;
