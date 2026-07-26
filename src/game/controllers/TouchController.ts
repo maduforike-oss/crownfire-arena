@@ -3,29 +3,31 @@ import type { Direction } from '../utils/types';
 
 type TouchAction = 'bomb' | 'special' | 'remote' | 'pause';
 
+const STICK_CENTER = { x: 132, y: 590 };
+const STICK_TRAVEL = 54;
+const STICK_DEAD_ZONE = 13;
+
 export class TouchController {
   readonly visible: boolean;
   private readonly root: Phaser.GameObjects.Container;
-  private readonly heldDirections = new Map<number, Direction>();
   private currentDirection: Direction = 'none';
   private pending = new Set<TouchAction>();
+  private stickPointerId?: number;
+  private stickKnob?: Phaser.GameObjects.Arc;
+  private stickGlow?: Phaser.GameObjects.Arc;
 
   constructor(private readonly scene: Phaser.Scene) {
     this.visible = scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
     this.root = scene.add.container(0, 0).setDepth(180).setScrollFactor(0).setVisible(this.visible);
     if (!this.visible) return;
 
-    this.createDirectionButton(130, 534, 'up', '▲');
-    this.createDirectionButton(130, 654, 'down', '▼');
-    this.createDirectionButton(70, 594, 'left', '◀');
-    this.createDirectionButton(190, 594, 'right', '▶');
-    this.root.add(this.scene.add.circle(130, 594, 24, 0x0d0c12, 0.82).setStrokeStyle(2, 0xd8a84e, 0.4));
-
+    this.createJoystick();
     this.createActionButton(1162, 555, 66, 0xf06a31, 'BOMB', 'bomb');
     this.createActionButton(1080, 628, 54, 0xa974ff, 'POWER', 'special');
     this.createActionButton(1210, 652, 48, 0x9e70ff, 'HEX', 'remote');
-    this.createActionButton(1238, 42, 34, 0xd8a84e, 'Ⅱ', 'pause');
+    this.createActionButton(1238, 42, 34, 0xd8a84e, 'II', 'pause');
 
+    this.scene.input.on('pointermove', this.moveJoystick, this);
     this.scene.input.on('pointerup', this.releasePointer, this);
     this.scene.input.on('gameout', this.releaseAll, this);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
@@ -51,28 +53,81 @@ export class TouchController {
     return this.consume('pause');
   }
 
-  private createDirectionButton(x: number, y: number, direction: Direction, glyph: string): void {
-    const glow = this.scene.add.circle(x, y, 47, 0xd8a84e, 0.06).setStrokeStyle(2, 0xd8a84e, 0.48);
-    const face = this.scene.add.circle(x, y, 39, 0x11131b, 0.9).setStrokeStyle(1, 0xffdf91, 0.34);
-    const label = this.scene.add.text(x, y, glyph, {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '28px', color: '#ffe7aa'
+  private createJoystick(): void {
+    const outerGlow = this.scene.add.circle(
+      STICK_CENTER.x,
+      STICK_CENTER.y,
+      80,
+      0x5e91c9,
+      0.08
+    ).setStrokeStyle(2, 0x9ec8ff, 0.42);
+    const base = this.scene.add.circle(
+      STICK_CENTER.x,
+      STICK_CENTER.y,
+      68,
+      0x090b12,
+      0.78
+    ).setStrokeStyle(3, 0xd8a84e, 0.56);
+    const compass = this.scene.add.circle(
+      STICK_CENTER.x,
+      STICK_CENTER.y,
+      47,
+      0x111722,
+      0.72
+    ).setStrokeStyle(1, 0x9ec8ff, 0.35);
+    const horizontal = this.scene.add.rectangle(STICK_CENTER.x, STICK_CENTER.y, 88, 2, 0x9ec8ff, 0.18);
+    const vertical = this.scene.add.rectangle(STICK_CENTER.x, STICK_CENTER.y, 2, 88, 0x9ec8ff, 0.18);
+    this.stickGlow = this.scene.add.circle(
+      STICK_CENTER.x,
+      STICK_CENTER.y,
+      42,
+      0x5e91c9,
+      0.08
+    ).setStrokeStyle(2, 0x9ec8ff, 0.38);
+    this.stickKnob = this.scene.add.circle(
+      STICK_CENTER.x,
+      STICK_CENTER.y,
+      31,
+      0x202a39,
+      0.98
+    ).setStrokeStyle(3, 0xffdf91, 0.9);
+    const crown = this.scene.add.text(STICK_CENTER.x, STICK_CENTER.y, '+', {
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fontSize: '24px',
+      color: '#f7d783'
     }).setOrigin(0.5);
-    const zone = this.scene.add.zone(x, y, 100, 100).setInteractive();
+    const zone = this.scene.add.zone(STICK_CENTER.x, STICK_CENTER.y, 190, 190).setInteractive();
     zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.heldDirections.set(pointer.id, direction);
-      this.currentDirection = direction;
-      face.setFillStyle(0x352536, 0.98);
-      glow.setAlpha(0.18).setScale(1.08);
+      if (this.stickPointerId !== undefined) return;
+      this.stickPointerId = pointer.id;
+      this.updateJoystick(pointer);
+      this.stickGlow?.setAlpha(0.28).setScale(1.08);
     });
-    const release = (pointer: Phaser.Input.Pointer) => {
-      this.heldDirections.delete(pointer.id);
-      const held = [...this.heldDirections.values()];
-      this.currentDirection = held[held.length - 1] ?? 'none';
-      face.setFillStyle(0x11131b, 0.9);
-      glow.setAlpha(1).setScale(1);
-    };
-    zone.on('pointerup', release).on('pointerout', release);
-    this.root.add([glow, face, label, zone]);
+    this.root.add([outerGlow, base, compass, horizontal, vertical, this.stickGlow, this.stickKnob, crown, zone]);
+  }
+
+  private moveJoystick(pointer: Phaser.Input.Pointer): void {
+    if (pointer.id !== this.stickPointerId || !pointer.isDown) return;
+    this.updateJoystick(pointer);
+  }
+
+  private updateJoystick(pointer: Phaser.Input.Pointer): void {
+    const dx = pointer.x - STICK_CENTER.x;
+    const dy = pointer.y - STICK_CENTER.y;
+    const distance = Math.hypot(dx, dy);
+    const scale = distance > STICK_TRAVEL ? STICK_TRAVEL / distance : 1;
+    const knobX = STICK_CENTER.x + dx * scale;
+    const knobY = STICK_CENTER.y + dy * scale;
+    this.stickKnob?.setPosition(knobX, knobY);
+
+    if (distance < STICK_DEAD_ZONE) {
+      this.currentDirection = 'none';
+      return;
+    }
+    this.currentDirection = Math.abs(dx) > Math.abs(dy)
+      ? dx < 0 ? 'left' : 'right'
+      : dy < 0 ? 'up' : 'down';
   }
 
   private createActionButton(x: number, y: number, radius: number, color: number, labelText: string, action: TouchAction): void {
@@ -98,21 +153,27 @@ export class TouchController {
   }
 
   private releasePointer(pointer: Phaser.Input.Pointer): void {
-    this.heldDirections.delete(pointer.id);
-    const held = [...this.heldDirections.values()];
-    this.currentDirection = held[held.length - 1] ?? 'none';
+    if (pointer.id !== this.stickPointerId) return;
+    this.resetJoystick();
   }
 
   private releaseAll(): void {
-    this.heldDirections.clear();
+    this.resetJoystick();
+  }
+
+  private resetJoystick(): void {
+    this.stickPointerId = undefined;
     this.currentDirection = 'none';
+    this.stickKnob?.setPosition(STICK_CENTER.x, STICK_CENTER.y);
+    this.stickGlow?.setAlpha(1).setScale(1);
   }
 
   private destroy(): void {
+    this.scene.input.off('pointermove', this.moveJoystick, this);
     this.scene.input.off('pointerup', this.releasePointer, this);
     this.scene.input.off('gameout', this.releaseAll, this);
     this.root.destroy(true);
-    this.heldDirections.clear();
     this.pending.clear();
+    this.stickPointerId = undefined;
   }
 }

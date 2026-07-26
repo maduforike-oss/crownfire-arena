@@ -3,6 +3,10 @@ import type { AnimationState, Direction } from '../utils/types';
 import type { Player } from '../entities/Player';
 import { getCharacter } from '../config/Characters';
 import type { CharacterClass } from '../utils/types';
+import {
+  getChampionAnimation,
+  type ChampionAnimationState
+} from '../config/ChampionAnimations';
 
 interface MotionProfile {
   idleBob: number;
@@ -30,8 +34,6 @@ export interface ActorVisual {
   label: Phaser.GameObjects.Text;
   health: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
-  rim: Phaser.GameObjects.Image;
-  energyGlow: Phaser.GameObjects.Image;
   aura: Phaser.GameObjects.Arc;
   buffAura: Phaser.GameObjects.Arc;
   shieldAura: Phaser.GameObjects.Arc;
@@ -43,6 +45,8 @@ export interface ActorVisual {
   lastY: number;
   lastParticleAt: number;
   damageFlashUntil: number;
+  animationStartedAt: number;
+  actionUntil: number;
 }
 
 export class AnimationSystem {
@@ -50,25 +54,20 @@ export class AnimationSystem {
 
   createActorVisual(actor: Player): ActorVisual {
     const character = getCharacter(actor.character);
-    const texture = this.scene.textures.exists(character.assetKey) ? character.assetKey : 'champion-fallback';
+    const animation = getChampionAnimation(actor.character);
+    const texture = this.scene.textures.exists(animation.textureKey) ? animation.textureKey : character.assetKey;
     const c = this.scene.add.container(actor.world.x, actor.world.y);
     const profile = MOTION[actor.character];
-    const shadow = this.scene.add.ellipse(0, 23, actor.isHuman ? 54 : 49, actor.isHuman ? 18 : 16, 0x000000, 0.52);
+    const shadow = this.scene.add.ellipse(0, 24, actor.isHuman ? 48 : 44, actor.isHuman ? 15 : 14, 0x000000, 0.7);
     const aura = this.scene.add.circle(0, 0, 34, character.accentColor, actor.isHuman ? 0.13 : 0.07).setStrokeStyle(2, character.accentColor, actor.isHuman ? 0.42 : 0.2);
     const buffAura = this.scene.add.circle(0, 0, 39, character.accentColor, 0).setStrokeStyle(3, character.accentColor, 0);
     const shieldAura = this.scene.add.circle(0, 0, 32, 0xf7d783, 0).setStrokeStyle(3, 0xf7d783, 0);
     const ring = this.scene.add.circle(0, 0, 25, actor.accent, 0.13).setStrokeStyle(2, actor.accent, actor.isHuman ? 0.86 : 0.38);
     const marker = actor.isHuman ? this.scene.add.triangle(0, -58, -10, 0, 10, 0, 0, -14, actor.accent, 1) : this.scene.add.circle(0, -51, 5, actor.accent, 0.8);
     const baseScale = 1;
-    const spriteSize = actor.isHuman ? 106 : 98;
-    const sprite = this.scene.add.image(0, 0, texture).setDisplaySize(spriteSize, spriteSize);
-    const rim = this.scene.add.image(0, 2, texture).setDisplaySize(spriteSize + 8, spriteSize + 8).setTint(0x050509).setAlpha(0.88);
-    const energyGlow = this.scene.add.image(0, 0, texture)
-      .setDisplaySize(spriteSize + 13, spriteSize + 13)
-      .setTint(character.accentColor)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setAlpha(profile.glowAlpha);
-    const motion = this.scene.add.container(0, -16, [energyGlow, rim, sprite]);
+    const spriteSize = actor.isHuman ? 118 : 108;
+    const sprite = this.scene.add.image(0, 0, texture, 0).setDisplaySize(spriteSize, spriteSize);
+    const motion = this.scene.add.container(0, -13, [sprite]);
     const label = this.scene.add.text(0, 30, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
       fontFamily: 'Georgia',
       fontSize: actor.isHuman ? '13px' : '11px',
@@ -86,8 +85,6 @@ export class AnimationSystem {
       label,
       health,
       sprite,
-      rim,
-      energyGlow,
       aura,
       buffAura,
       shieldAura,
@@ -98,19 +95,26 @@ export class AnimationSystem {
       lastX: actor.world.x,
       lastY: actor.world.y,
       lastParticleAt: 0,
-      damageFlashUntil: 0
+      damageFlashUntil: 0,
+      animationStartedAt: this.scene.time.now,
+      actionUntil: 0
     };
   }
 
   updateActor(actor: Player, visual: ActorVisual, moving: boolean, direction: Direction): void {
-    const state = this.resolveState(actor, moving, direction);
+    const actionActive = this.scene.time.now < visual.actionUntil;
+    const state = !actor.alive
+      ? 'defeated'
+      : actionActive
+        ? visual.state
+        : this.resolveState(actor, moving, direction);
     if (visual.state !== state) {
       visual.state = state;
       this.enterState(actor, visual, state);
     }
     visual.body.setPosition(actor.world.x, actor.world.y);
     visual.body.setDepth(20 + actor.world.y / 1000);
-    visual.body.setAlpha(actor.alive ? (actor.invulnerableMs > 0 ? 0.62 : 1) : 0.32);
+    visual.body.setAlpha(actor.alive ? 1 : 0.34);
     visual.ring.setAlpha(actor.stats.shielded ? 0.65 : actor.isHuman ? 0.22 : 0.12);
     visual.aura.setScale(actor.stats.temporaryGhostMode > 0 ? 1.28 : 1 + Math.sin(this.scene.time.now / 360) * 0.035);
     visual.aura.setAlpha(actor.stats.temporaryGhostMode > 0 ? 0.28 : actor.isHuman ? 0.12 : 0.07);
@@ -124,13 +128,13 @@ export class AnimationSystem {
     else if (actor.stats.temporaryGhostMode > 0) visual.sprite.setTint(0xe8ddff);
     else visual.sprite.setTint(0xffffff);
     visual.sprite.setFlipX(direction === 'left');
-    visual.rim.setFlipX(direction === 'left');
-    visual.energyGlow.setFlipX(direction === 'left');
     visual.sprite.setDisplaySize(visual.spriteSize, visual.spriteSize);
-    visual.rim.setDisplaySize(visual.spriteSize + 8, visual.spriteSize + 8);
-    visual.energyGlow.setDisplaySize(visual.spriteSize + 13, visual.spriteSize + 13);
-    visual.energyGlow.setAlpha(MOTION[actor.character].glowAlpha + Math.sin(this.scene.time.now / 260) * 0.04);
-    visual.shadow.setScale(actor.stats.championSurgeMs > 0 ? 1.18 : 1);
+    this.updateAnimationFrame(actor, visual);
+    const contact = visual.state.startsWith('walk')
+      ? 0.9 + Number(visual.sprite.frame.name) % 2 * 0.08
+      : 1;
+    visual.shadow.setScale(actor.stats.championSurgeMs > 0 ? 1.18 : contact, contact);
+    visual.shadow.setAlpha(actor.invulnerableMs > 0 ? 0.52 : 0.7);
     if (moving && this.scene.time.now - visual.lastParticleAt > MOTION[actor.character].cadence * 1.7) {
       visual.lastParticleAt = this.scene.time.now;
       this.emitMovementAccent(actor, visual.lastX, visual.lastY);
@@ -141,9 +145,9 @@ export class AnimationSystem {
 
   playPlaceBomb(actor: Player, visual: ActorVisual): void {
     visual.state = 'place_bomb';
-    this.scene.tweens.killTweensOf(visual.motion);
-    visual.motion.setScale(1).setAngle(0);
-    this.scene.tweens.add({ targets: visual.motion, scaleX: 1.08, scaleY: 0.9, y: -10, duration: 80, yoyo: true, onComplete: () => visual.motion.setScale(1).setY(-15) });
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = this.scene.time.now + 330;
+    visual.motion.setScale(1).setAngle(0).setY(-13);
     this.emitFactionParticles(actor, actor.world.x, actor.world.y + 8, 5);
   }
 
@@ -157,21 +161,16 @@ export class AnimationSystem {
       ease: 'Cubic.easeOut'
     });
     this.emitFactionParticles(actor, actor.world.x, actor.world.y + 4, 9);
-    this.scene.tweens.killTweensOf(visual.motion);
-    this.scene.tweens.add({
-      targets: visual.motion,
-      y: -23,
-      scale: 1.13,
-      duration: 110,
-      yoyo: true,
-      ease: 'Back.easeOut',
-      onComplete: () => this.enterState(actor, visual, `idle_${this.directionName(actor)}` as AnimationState)
-    });
+    visual.state = 'special';
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = this.scene.time.now + 480;
   }
 
   playDamaged(actor: Player, visual: ActorVisual): void {
     visual.state = 'damaged';
     visual.damageFlashUntil = this.scene.time.now + 320;
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = this.scene.time.now + 250;
     const tint = actor.character === 'frost' ? 0xd8f7ff : actor.character === 'veil' ? 0xf0d8ff : actor.character === 'dragon' ? 0xff6a2b : 0xffffff;
     visual.sprite.setTint(tint);
     this.scene.tweens.add({ targets: visual.sprite, alpha: 0.45, duration: 70, yoyo: true, repeat: 2, onComplete: () => visual.sprite.clearTint().setAlpha(1) });
@@ -179,7 +178,8 @@ export class AnimationSystem {
 
   playDefeated(actor: Player, visual: ActorVisual): void {
     visual.state = 'defeated';
-    this.scene.tweens.add({ targets: visual.body, angle: actor.isHuman ? -10 : 10, y: visual.body.y + 10, alpha: 0.25, duration: 360, ease: 'Cubic.easeOut' });
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = Number.POSITIVE_INFINITY;
   }
 
   emitFootstep(actor: Player): void {
@@ -227,24 +227,29 @@ export class AnimationSystem {
 
   private enterState(actor: Player, visual: ActorVisual, state: AnimationState): void {
     this.scene.tweens.killTweensOf(visual.motion);
-    visual.motion.setScale(1).setAngle(0).setPosition(0, -16);
+    visual.motion.setScale(1).setAngle(0).setPosition(0, actor.character === 'veil' ? -16 : -13);
     visual.sprite.setDisplaySize(visual.spriteSize, visual.spriteSize);
-    const moving = state.startsWith('walk');
-    const profile = MOTION[actor.character];
-    const y = actor.character === 'veil' ? -21 : -16;
-    const directionLean = state.endsWith('left') ? -profile.lean : state.endsWith('right') ? profile.lean : 0;
-    const duration = moving ? profile.cadence : 860;
-    this.scene.tweens.add({
-      targets: visual.motion,
-      y: y - (moving ? profile.walkBob : profile.idleBob),
-      angle: moving ? directionLean : 0,
-      scaleX: moving && (actor.character === 'wolf' || actor.character === 'skin') ? 1.045 : 1,
-      scaleY: moving && (actor.character === 'stone' || actor.character === 'frost') ? 0.965 : 0.985,
-      duration,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.inOut'
-    });
+    visual.animationStartedAt = this.scene.time.now;
+  }
+
+  private updateAnimationFrame(actor: Player, visual: ActorVisual): void {
+    const animation = getChampionAnimation(actor.character);
+    const state = this.frameState(visual.state);
+    const range = animation.states[state];
+    const elapsed = Math.max(0, this.scene.time.now - visual.animationStartedAt);
+    const count = range.end - range.start + 1;
+    const raw = Math.floor(elapsed / range.frameMs);
+    const offset = range.loop ? raw % count : Math.min(count - 1, raw);
+    visual.sprite.setFrame(range.start + offset);
+  }
+
+  private frameState(state: AnimationState): ChampionAnimationState {
+    if (state.startsWith('walk')) return 'walk';
+    if (state.startsWith('idle')) return 'idle';
+    if (state === 'place_bomb') return 'place';
+    if (state === 'special') return 'special';
+    if (state === 'damaged') return 'damaged';
+    return 'defeated';
   }
 
   private updateBuffAuras(actor: Player, visual: ActorVisual): void {
@@ -317,10 +322,6 @@ export class AnimationSystem {
     return particle;
   }
 
-  private directionName(actor: Player): Exclude<Direction, 'none'> {
-    if (Math.abs(actor.lastDir.x) > Math.abs(actor.lastDir.y)) return actor.lastDir.x < 0 ? 'left' : 'right';
-    return actor.lastDir.y < 0 ? 'up' : 'down';
-  }
 }
 
 function visualSize(actor: Player): number {

@@ -92,9 +92,8 @@ export class BombViewSystem {
       if (urgency >= 0.68) {
         const alpha = 0.22 + urgency * 0.3;
         this.telegraphs.push(...this.explosionFx.renderTelegraph(bomb.previewTiles, theme, alpha));
-        const step = Math.floor(bomb.remainingMs / 150);
-        if (step !== view.warnedStep && bomb.remainingMs < 720) {
-          view.warnedStep = step;
+        if (view.warnedStep < 0 && bomb.remainingMs < 620) {
+          view.warnedStep = 0;
           AudioSystem.get().sfx('tick');
         }
       }

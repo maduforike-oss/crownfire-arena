@@ -66,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.resetMatchState();
     AudioSystem.get().startMusic('battle', SESSION.map);
     this.input.keyboard?.once('keydown-M', () => this.toggleMute());
     this.input.once('pointerdown', () => AudioSystem.get().startMusic('battle', SESSION.map));
@@ -840,6 +841,22 @@ export class GameScene extends Phaser.Scene {
   private toggleMute(): void {
     const muted = AudioSystem.get().toggleMute();
     this.floatText(640, 98, muted ? 'Audio muted' : 'Audio on', '#f7d783');
+  }
+
+  private resetMatchState(): void {
+    this.ended = false;
+    this.paused = false;
+    this.pausedText = undefined;
+    this.shrineTimerMs = 15000;
+    this.spawnGraceMs = 2200;
+    this.shrineCountdown = undefined;
+    this.shrineText = undefined;
+    this.actors = [];
+    this.views.clear();
+    this.blockSprites.clear();
+    this.powerSprites.clear();
+    this.frostZones.clear();
+    this.frostSprites.clear();
   }
 
   private shutdown(): void {

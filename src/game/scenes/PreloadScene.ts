@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { POWER_UPS } from '../config/PowerUps';
+import { CHAMPION_ANIMATIONS } from '../config/ChampionAnimations';
 import { CHARACTERS } from '../config/Characters';
 import { MAPS } from '../config/Maps';
 import { BOMB_VISUAL_THEMES } from '../config/BombVisualThemes';
@@ -16,12 +17,15 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('reference-character-power-atlas', 'assets/art/reference-character-power-atlas.png');
     this.load.image('champion-card-frame', 'assets/ui/champion_card_frame.png');
     this.load.image('champion-card-selected-frame', 'assets/ui/champion_card_selected_frame.png');
-    this.load.image('map-ashen-premium-floor', 'assets/maps/ashen/premium_floor_plate.webp');
+    this.load.image('menu-crownfire-hero', 'assets/menu/crownfire_hero.webp');
     this.load.image('map-ashen-premium-floor-glow', 'assets/maps/ashen/premium_floor_glow.webp');
-    this.load.image('map-ashen-premium-solid', 'assets/maps/ashen/premium_solid.png');
-    this.load.image('map-ashen-premium-block', 'assets/maps/ashen/premium_destructible.png');
-    this.load.image('map-ashen-premium-shrine', 'assets/maps/ashen/premium_shrine.png');
     for (const character of CHARACTERS) this.load.image(character.assetKey, character.portraitPath);
+    for (const animation of Object.values(CHAMPION_ANIMATIONS)) {
+      this.load.spritesheet(animation.textureKey, animation.path, {
+        frameWidth: animation.frameWidth,
+        frameHeight: animation.frameHeight
+      });
+    }
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);
     }
@@ -33,6 +37,10 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(`map-${map.id}-shrine`, `assets/maps/${map.id}/shrine.png`);
       this.load.image(`map-${map.id}-border`, `assets/maps/${map.id}/border.png`);
       this.load.image(`landscape-${map.id}`, `assets/maps/${map.id}/landscape.png`);
+      this.load.image(`map-${map.id}-premium-floor`, `assets/maps/${map.id}/premium_floor_plate.webp`);
+      this.load.image(`map-${map.id}-premium-solid`, `assets/maps/${map.id}/premium_solid.png`);
+      this.load.image(`map-${map.id}-premium-block`, `assets/maps/${map.id}/premium_destructible.png`);
+      this.load.image(`map-${map.id}-premium-shrine`, `assets/maps/${map.id}/premium_shrine.png`);
     }
   }
 

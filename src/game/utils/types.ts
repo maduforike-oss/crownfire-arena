@@ -11,6 +11,7 @@ export type AnimationState =
   | 'walk_left'
   | 'walk_right'
   | 'place_bomb'
+  | 'special'
   | 'damaged'
   | 'defeated';
 export type BombVisualThemeId = 'ember' | 'moonfang' | 'frost' | 'veil' | 'shadow' | 'stone' | 'raven' | 'beast';

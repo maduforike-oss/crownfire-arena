@@ -15,6 +15,31 @@ export class ExplosionSystem {
     this.scene.cameras.main.shake(120, theme.screenShakeIntensity);
     const center = this.centerTile(tiles);
     const centerKey = center ? `${center.x},${center.y}` : '';
+    if (center) {
+      const origin = this.grid.toWorld(center);
+      const shock = this.scene.add.circle(origin.x, origin.y, 22, theme.blastColor, 0.18)
+        .setStrokeStyle(5, theme.coreColor, 0.95)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      const flash = this.scene.add.circle(origin.x, origin.y, 17, 0xffffff, 0.74)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.effectLayer.add([shock, flash]);
+      this.scene.tweens.add({
+        targets: shock,
+        scale: 2.8,
+        alpha: 0,
+        duration: GAME_CONFIG.explosionMs,
+        ease: 'Cubic.easeOut',
+        onComplete: () => shock.destroy()
+      });
+      this.scene.tweens.add({
+        targets: flash,
+        scale: 1.8,
+        alpha: 0,
+        duration: 180,
+        ease: 'Quad.easeOut',
+        onComplete: () => flash.destroy()
+      });
+    }
     for (const tile of tiles) {
       const w = this.grid.toWorld(tile);
       const isCenter = `${tile.x},${tile.y}` === centerKey;
@@ -62,20 +87,56 @@ export class ExplosionSystem {
   }
 
   renderTelegraph(tiles: GridPosition[], theme: BombVisualTheme, alpha: number): Phaser.GameObjects.GameObject[] {
-    const centerKey = this.centerKey(tiles);
+    const center = this.centerTile(tiles);
+    const centerKey = center ? `${center.x},${center.y}` : '';
     return tiles.map((tile) => {
       const w = this.grid.toWorld(tile);
       const isCenter = `${tile.x},${tile.y}` === centerKey;
       const group = this.scene.add.container(w.x, w.y);
-      const rect = this.scene.add.rectangle(0, 0, GAME_CONFIG.tileSize - 6, GAME_CONFIG.tileSize - 6, theme.blastColor, Math.max(alpha, 0.18))
-        .setStrokeStyle(isCenter ? 3 : 2, theme.coreColor, 0.92);
-      const crossA = this.scene.add.line(0, 0, -17, 0, 17, 0, theme.coreColor, 0.85).setLineWidth(isCenter ? 4 : 3);
-      const crossB = this.scene.add.line(0, 0, 0, -17, 0, 17, theme.coreColor, 0.85).setLineWidth(isCenter ? 4 : 3);
-      const ring = this.scene.add.circle(0, 0, isCenter ? 18 : 12, theme.coreColor, 0).setStrokeStyle(2, theme.coreColor, 0.85);
-      group.add([rect, crossA, crossB, ring]);
+      const zone = this.scene.add.rectangle(
+        0,
+        0,
+        GAME_CONFIG.tileSize - 5,
+        GAME_CONFIG.tileSize - 5,
+        theme.blastColor,
+        Math.max(alpha * 0.7, 0.18)
+      ).setStrokeStyle(isCenter ? 4 : 3, theme.coreColor, 0.96);
+      const inner = this.scene.add.rectangle(
+        0,
+        0,
+        GAME_CONFIG.tileSize - 15,
+        GAME_CONFIG.tileSize - 15,
+        0x080810,
+        0.26
+      ).setStrokeStyle(1, theme.coreColor, 0.48);
+      const rune = this.scene.add.image(0, 0, theme.explosionTexture)
+        .setDisplaySize(isCenter ? 45 : 36, isCenter ? 45 : 36)
+        .setTint(theme.coreColor)
+        .setAlpha(isCenter ? 0.52 : 0.34)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      group.add([zone, inner, rune]);
+      if (isCenter) {
+        group.add(this.scene.add.circle(0, 0, 19, theme.coreColor, 0.06).setStrokeStyle(3, theme.coreColor, 0.92));
+        group.add(this.scene.add.circle(0, 0, 9, 0xffffff, 0.16).setStrokeStyle(2, 0xffffff, 0.86));
+      } else if (center) {
+        const dx = Math.sign(tile.x - center.x);
+        const dy = Math.sign(tile.y - center.y);
+        const arrow = dx !== 0
+          ? this.scene.add.triangle(0, 0, -8 * dx, -8, 10 * dx, 0, -8 * dx, 8, theme.coreColor, 0.94)
+          : this.scene.add.triangle(0, 0, -8, -8 * dy, 0, 10 * dy, 8, -8 * dy, theme.coreColor, 0.94);
+        group.add(arrow.setStrokeStyle(1, 0xffffff, 0.6));
+      }
       this.renderTelegraphMotif(group, theme);
       this.effectLayer.add(group);
-      this.scene.tweens.add({ targets: group, alpha: 0.48, scale: 1.08, duration: 180, yoyo: true, repeat: -1 });
+      this.scene.tweens.add({
+        targets: group,
+        alpha: 0.68,
+        scale: 1.045,
+        duration: 220,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.inOut'
+      });
       return group;
     });
   }

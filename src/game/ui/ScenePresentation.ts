@@ -3,13 +3,6 @@ import { PRESENTATION, hexColor } from '../config/PresentationConfig';
 
 export type BackdropTheme = 'ashen' | 'moonfang' | 'frostkeep' | 'hollowmoon';
 
-const ACCENTS: Record<BackdropTheme, number> = {
-  ashen: 0xf06a31,
-  moonfang: 0x9dc8ff,
-  frostkeep: 0x82e8ff,
-  hollowmoon: 0xa974ff
-};
-
 export interface BackdropOptions {
   theme: BackdropTheme;
   alternateTheme?: BackdropTheme;
@@ -20,53 +13,30 @@ export interface BackdropOptions {
 
 export function addSceneBackdrop(scene: Phaser.Scene, options: BackdropOptions): Phaser.GameObjects.Container {
   scene.cameras.main.fadeIn(260, 0, 0, 0);
-  const { theme, alternateTheme = theme, imageAlpha = 0.7, veilAlpha = 0.32, particles = 26 } = options;
-  const accent = ACCENTS[theme];
+  const { theme, imageAlpha = 0.7, veilAlpha = 0.32 } = options;
   const root = scene.add.container(0, 0).setDepth(-20);
   root.add(scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height / 2, PRESENTATION.width, PRESENTATION.height, 0x07080d));
-  root.add(scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, 'concept-sheet')
-    .setDisplaySize(PRESENTATION.width, 853)
-    .setAlpha(Math.min(0.5, imageAlpha * 0.58)));
-
-  const left = scene.add.image(0, PRESENTATION.height / 2, `landscape-${theme}`)
-    .setOrigin(0, 0.5)
-    .setDisplaySize(PRESENTATION.width * 0.57, PRESENTATION.height * 1.14)
-    .setAlpha(imageAlpha * 0.3);
-  const right = scene.add.image(PRESENTATION.width, PRESENTATION.height / 2, `landscape-${alternateTheme}`)
-    .setOrigin(1, 0.5)
-    .setDisplaySize(PRESENTATION.width * 0.57, PRESENTATION.height * 1.14)
-    .setFlipX(true)
-    .setAlpha(imageAlpha * 0.24);
-  root.add([left, right]);
-
-  const centreShade = scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height / 2, PRESENTATION.width, PRESENTATION.height, 0x07070b, veilAlpha);
-  const topShade = scene.add.rectangle(PRESENTATION.width / 2, 0, PRESENTATION.width, 170, 0x06070b, 0.56).setOrigin(0.5, 0);
-  const bottomShade = scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height, PRESENTATION.width, 150, 0x06070b, 0.62).setOrigin(0.5, 1);
-  root.add([centreShade, topShade, bottomShade]);
-
-  const vignetteTop = scene.add.rectangle(PRESENTATION.width / 2, 4, PRESENTATION.width - 18, 4, accent, 0.52);
-  const vignetteBottom = scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height - 4, PRESENTATION.width - 18, 4, 0xd8a84e, 0.3);
-  root.add([vignetteTop, vignetteBottom]);
-
-  for (let i = 0; i < particles; i += 1) {
-    const x = Phaser.Math.Between(20, PRESENTATION.width - 20);
-    const y = Phaser.Math.Between(40, PRESENTATION.height - 30);
-    const mote = scene.add.circle(x, y, Phaser.Math.Between(1, 3), i % 5 === 0 ? 0xf7d783 : accent, Phaser.Math.FloatBetween(0.1, 0.34));
-    root.add(mote);
-    scene.tweens.add({
-      targets: mote,
-      y: y - Phaser.Math.Between(18, 56),
-      alpha: 0.03,
-      duration: Phaser.Math.Between(1800, 4200),
-      delay: Phaser.Math.Between(0, 1200),
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.inOut'
-    });
-  }
-
-  scene.tweens.add({ targets: left, x: -10, scaleX: 1.015, scaleY: 1.015, duration: 7200, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-  scene.tweens.add({ targets: right, x: PRESENTATION.width + 10, scaleX: 1.02, scaleY: 1.02, duration: 8400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+  const heroKey = theme === 'ashen' ? 'menu-crownfire-hero' : `map-${theme}-premium-floor`;
+  const hero = scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, heroKey)
+    .setDisplaySize(theme === 'ashen' ? PRESENTATION.width : PRESENTATION.width, theme === 'ashen' ? PRESENTATION.height : 1110)
+    .setAlpha(Math.min(0.82, imageAlpha));
+  root.add(hero);
+  root.add(scene.add.rectangle(
+    PRESENTATION.width / 2,
+    PRESENTATION.height / 2,
+    PRESENTATION.width,
+    PRESENTATION.height,
+    0x07070b,
+    Math.max(0.28, veilAlpha)
+  ));
+  scene.tweens.add({
+    targets: hero,
+    scale: 1.018,
+    duration: 9000,
+    yoyo: true,
+    repeat: -1,
+    ease: 'Sine.inOut'
+  });
   return root;
 }
 
