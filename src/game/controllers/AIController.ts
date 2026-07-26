@@ -10,6 +10,7 @@ import { dirs, distance, keyOf, sameTile } from '../utils/math';
 export interface BotIntent {
   dir: Direction;
   placeBomb: boolean;
+  useSpecial?: boolean;
 }
 
 const dirName = (from: GridPosition, to: GridPosition): Direction => {
@@ -23,9 +24,27 @@ const dirName = (from: GridPosition, to: GridPosition): Direction => {
 export class AIController {
   think(bot: Bot, opponents: Player[], grid: GridSystem, bombs: BombSystem, danger: DangerMapSystem, powers: PowerUpSystem): BotIntent {
     if (!bot.alive) return { dir: 'none', placeBomb: false };
+
+    // A bot must finish the escape it planned before it considers another goal.
+    // The previous implementation only looked for an adjacent tile outside the
+    // blast, which meant open-area bombs were almost never considered safe.
+    const ownBomb = bombs.bombs.find((bomb) => bomb.ownerId === bot.id);
+    if (ownBomb) {
+      const route = this.routeToSafety(bot.grid, ownBomb.previewTiles, grid, bombs, danger, ownBomb.grid);
+      if (route) {
+        bot.escapeTarget = route.target;
+        bot.state = 'FLEE_DANGER';
+        return { dir: route.first, placeBomb: false, useSpecial: this.shouldUseSpecial(bot, undefined, true, false, danger) };
+      }
+      // If a chain reaction changed the board after placement, use the best
+      // available emergency movement rather than stopping on the bomb lane.
+      bot.state = 'FLEE_DANGER';
+      return { dir: this.flee(bot, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, undefined, true, false, danger) };
+    }
+    bot.escapeTarget = undefined;
     if (danger.isDanger(bot.grid)) {
       bot.state = 'FLEE_DANGER';
-      return { dir: this.flee(bot, grid, bombs, danger), placeBomb: false };
+      return { dir: this.flee(bot, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, undefined, true, false, danger) };
     }
 
     const livingOpponents = opponents.filter((actor) => actor.alive && actor !== bot);
@@ -37,12 +56,12 @@ export class AIController {
     const surgingThreat = livingOpponents.find((actor) => actor.stats.championSurgeMs > 0 && distance(bot.grid, actor.grid) <= 6);
     if (surgingThreat) {
       bot.state = 'FLEE_DANGER';
-      return { dir: this.fleeFrom(bot, surgingThreat.grid, grid, bombs, danger), placeBomb: false };
+      return { dir: this.fleeFrom(bot, surgingThreat.grid, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, surgingThreat, true, false, danger) };
     }
 
     if ((adjacentTarget || adjacentBlock) && bombs.canPlace(bot) && this.hasEscapeAfterOwnBomb(bot, grid, bombs, danger)) {
       bot.state = 'PLACE_BOMB';
-      return { dir: this.fleeFromOwnBomb(bot, grid, bombs, danger), placeBomb: true };
+      return { dir: this.fleeFromOwnBomb(bot, grid, bombs, danger), placeBomb: true, useSpecial: this.shouldUseSpecial(bot, target, false, true, danger) };
     }
 
     const nearbyPower = powers.powerUps
@@ -50,28 +69,54 @@ export class AIController {
       .sort((a, b) => distance(bot.grid, a.grid) - distance(bot.grid, b.grid))[0];
     if (nearbyPower) {
       bot.state = 'SEEK_POWERUP';
-      return { dir: this.pathStep(bot.grid, nearbyPower.grid, grid, bombs, danger), placeBomb: false };
+      return { dir: this.pathStep(bot.grid, nearbyPower.grid, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, target, false, false, danger) };
     }
 
     if (target && closeToTarget) {
       bot.state = 'CHASE_PLAYER';
-      return { dir: this.pathStep(bot.grid, target.grid, grid, bombs, danger), placeBomb: false };
+      return { dir: this.pathStep(bot.grid, target.grid, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, target, false, false, danger) };
     }
 
     const center = { x: Math.floor(grid.map.width / 2), y: Math.floor(grid.map.height / 2) };
     if (Math.random() < 0.34 && distance(bot.grid, center) > 3) {
       bot.state = 'SEEK_POWERUP';
-      return { dir: this.pathStep(bot.grid, center, grid, bombs, danger), placeBomb: false };
+      return { dir: this.pathStep(bot.grid, center, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, target, false, false, danger) };
     }
 
     const blockTarget = this.nearestBlockAttackTile(bot.grid, grid, bombs, danger);
     if (blockTarget) {
       bot.state = 'SEEK_BLOCK';
-      return { dir: this.pathStep(bot.grid, blockTarget, grid, bombs, danger), placeBomb: false };
+      return { dir: this.pathStep(bot.grid, blockTarget, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, target, false, false, danger) };
     }
 
     bot.state = 'IDLE';
-    return { dir: this.wander(bot, grid, bombs, danger), placeBomb: false };
+    return { dir: this.wander(bot, grid, bombs, danger), placeBomb: false, useSpecial: this.shouldUseSpecial(bot, target, false, false, danger) };
+  }
+
+  private shouldUseSpecial(bot: Bot, target: Player | undefined, escaping: boolean, settingBomb: boolean, danger: DangerMapSystem): boolean {
+    if (bot.specialCooldownMs > 0) return false;
+    const targetDistance = target ? distance(bot.grid, target.grid) : Infinity;
+    switch (bot.character) {
+      case 'dragon':
+      case 'frost':
+        // Their current local specials arm the next bomb, so save the cast for
+        // an actual bomb setup instead of wasting it while roaming.
+        return settingBomb;
+      case 'wolf':
+        return escaping || targetDistance >= 4 && targetDistance <= 7;
+      case 'veil':
+        return escaping || danger.isDanger(bot.grid);
+      case 'skin':
+        return targetDistance <= 3;
+      case 'stone':
+        return targetDistance <= 3 || bot.stats.health <= 1;
+      case 'raven':
+        return escaping || targetDistance >= 4 && targetDistance <= 7;
+      case 'beast':
+        return targetDistance <= 6;
+      default:
+        return false;
+    }
   }
 
   private hasAdjacentBlock(pos: GridPosition, grid: GridSystem): boolean {
@@ -87,10 +132,60 @@ export class AIController {
 
   private hasEscapeAfterOwnBomb(bot: Bot, grid: GridSystem, bombs: BombSystem, danger: DangerMapSystem): boolean {
     const blast = bombs.computeBlast(bot.grid, bot.stats.blastRadius);
-    return dirs.some((d) => {
-      const p = { x: bot.grid.x + d.x, y: bot.grid.y + d.y };
-      return this.canStep(p, grid, bombs, danger) && !blast.some((tile) => sameTile(tile, p)) && this.openNeighbors(p, grid, bombs, danger) > 0;
-    });
+    return !!this.routeToSafety(bot.grid, blast, grid, bombs, danger, bot.grid, true);
+  }
+
+  /**
+   * Finds an actual escape route for a bomb fuse: it may briefly travel along
+   * the blast lane, but it must end on a non-blast tile.  `sealedOrigin`
+   * models the newly placed bomb so the bot cannot pretend it can turn around
+   * through its own bomb after leaving.
+   */
+  private routeToSafety(
+    from: GridPosition,
+    blast: GridPosition[],
+    grid: GridSystem,
+    bombs: BombSystem,
+    danger: DangerMapSystem,
+    sealedOrigin: GridPosition,
+    planningPlacement = false
+  ): { first: Direction; target: GridPosition } | undefined {
+    const blastKeys = new Set(blast.map(keyOf));
+    const startKey = keyOf(from);
+    const sealedKey = keyOf(sealedOrigin);
+    const queue: GridPosition[] = [{ ...from }];
+    const parents = new Map<string, string>();
+    const seen = new Set<string>([startKey]);
+
+    while (queue.length) {
+      const current = queue.shift()!;
+      const currentKey = keyOf(current);
+      // We need at least one movement step. This excludes the bomb square when
+      // simulating placement and avoids a false positive at the starting tile.
+      if (currentKey !== startKey && !blastKeys.has(currentKey) && !danger.isDanger(current)) {
+        let step = current;
+        while (parents.get(keyOf(step)) && parents.get(keyOf(step)) !== startKey) {
+          const [x, y] = parents.get(keyOf(step))!.split(',').map(Number);
+          step = { x, y };
+        }
+        return { first: dirName(from, step), target: current };
+      }
+
+      for (const d of dirs) {
+        const next = { x: current.x + d.x, y: current.y + d.y };
+        const nextKey = keyOf(next);
+        if (seen.has(nextKey) || nextKey === sealedKey) continue;
+        if (!grid.isWalkable(next) || bombs.isBombBlocking(next)) continue;
+        seen.add(nextKey);
+        parents.set(nextKey, currentKey);
+        queue.push(next);
+      }
+    }
+
+    // `planningPlacement` exists to make the simulation intent explicit at
+    // call sites; no alternative route is acceptable without a safe endpoint.
+    void planningPlacement;
+    return undefined;
   }
 
   private flee(bot: Bot, grid: GridSystem, bombs: BombSystem, danger: DangerMapSystem): Direction {
