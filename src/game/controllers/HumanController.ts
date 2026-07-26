@@ -45,7 +45,10 @@ export class HumanController {
   }
 
   consumePause(): boolean {
-    if (this.unified) return this.unified.consume('pause');
+    if (this.unified) {
+      this.unified.update();
+      return this.unified.consume('pause');
+    }
     return Phaser.Input.Keyboard.JustDown(this.keys.ESC);
   }
 }

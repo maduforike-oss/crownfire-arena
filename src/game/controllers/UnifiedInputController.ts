@@ -106,7 +106,8 @@ export class UnifiedInputController {
     this.latest = { source: 'keyboard', label: `${code} (key: ${event.key})`, at: performance.now() };
     if (this.captureAction) {
       event.preventDefault();
-      this.bindings[this.captureAction].keyboardCodes = [code];
+      const codes = this.bindings[this.captureAction].keyboardCodes;
+      if (!codes.includes(code)) codes.push(code);
       saveInputBindings(this.bindings);
       this.finishCapture(this.latest);
       return;
@@ -131,7 +132,8 @@ export class UnifiedInputController {
   private recordGamepadButton(index: number): void {
     this.latest = { source: 'gamepad', label: `Button ${index}`, at: performance.now() };
     if (this.captureAction) {
-      this.bindings[this.captureAction].gamepadButtons = [index];
+      const buttons = this.bindings[this.captureAction].gamepadButtons;
+      if (!buttons.includes(index)) buttons.push(index);
       saveInputBindings(this.bindings);
       this.finishCapture(this.latest);
       return;
