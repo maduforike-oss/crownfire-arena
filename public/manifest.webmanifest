@@ -1,0 +1,19 @@
+{
+  "name": "Crownfire Arena",
+  "short_name": "Crownfire",
+  "description": "An original dark-fantasy rune-bomb arena game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#08070b",
+  "theme_color": "#d8a84e",
+  "icons": [
+    {
+      "src": "assets/champions/dragon_blood_heir.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
