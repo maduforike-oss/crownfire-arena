@@ -13,7 +13,8 @@ export class ExplosionSystem {
 
   renderExplosion(tiles: GridPosition[], theme: BombVisualTheme): void {
     this.scene.cameras.main.shake(120, theme.screenShakeIntensity);
-    const centerKey = this.centerKey(tiles);
+    const center = this.centerTile(tiles);
+    const centerKey = center ? `${center.x},${center.y}` : '';
     for (const tile of tiles) {
       const w = this.grid.toWorld(tile);
       const isCenter = `${tile.x},${tile.y}` === centerKey;
@@ -23,17 +24,38 @@ export class ExplosionSystem {
       const sprite = this.scene.add.image(w.x, w.y, theme.explosionTexture).setAlpha(0.98);
       sprite.setDisplaySize(GAME_CONFIG.tileSize + 6, GAME_CONFIG.tileSize + 6);
       this.effectLayer.add(sprite);
+      const horizontal = center ? tile.y === center.y : true;
+      const beam = this.scene.add.rectangle(
+        w.x,
+        w.y,
+        isCenter ? 54 : horizontal ? 64 : 20,
+        isCenter ? 54 : horizontal ? 20 : 64,
+        theme.coreColor,
+        isCenter ? 0.52 : 0.4
+      ).setBlendMode(Phaser.BlendModes.ADD);
+      const hotCore = this.scene.add.rectangle(
+        w.x,
+        w.y,
+        isCenter ? 22 : horizontal ? 56 : 8,
+        isCenter ? 22 : horizontal ? 8 : 56,
+        0xffffff,
+        isCenter ? 0.72 : 0.56
+      ).setBlendMode(Phaser.BlendModes.ADD);
+      this.effectLayer.add([beam, hotCore]);
       this.renderMotif(w.x, w.y, theme, isCenter);
       this.spawnParticles(w.x, w.y, theme);
       this.scene.tweens.add({
-        targets: [sprite, underlay],
+        targets: [sprite, underlay, beam, hotCore],
         alpha: 0,
-        scale: 1.35,
+        scaleX: isCenter ? 1.35 : horizontal ? 1.35 : 0.72,
+        scaleY: isCenter ? 1.35 : horizontal ? 0.72 : 1.35,
         duration: GAME_CONFIG.explosionMs,
         ease: 'Cubic.easeOut',
         onComplete: () => {
           sprite.destroy();
           underlay.destroy();
+          beam.destroy();
+          hotCore.destroy();
         }
       });
     }
@@ -114,12 +136,17 @@ export class ExplosionSystem {
   }
 
   private centerKey(tiles: GridPosition[]): string {
+    const center = this.centerTile(tiles);
+    return center ? `${center.x},${center.y}` : '';
+  }
+
+  private centerTile(tiles: GridPosition[]): GridPosition | undefined {
     const byNeighbours = tiles
       .map((tile) => ({
         tile,
         links: tiles.filter((other) => Math.abs(other.x - tile.x) + Math.abs(other.y - tile.y) === 1).length
       }))
       .sort((a, b) => b.links - a.links)[0]?.tile ?? tiles[0];
-    return byNeighbours ? `${byNeighbours.x},${byNeighbours.y}` : '';
+    return byNeighbours;
   }
 }

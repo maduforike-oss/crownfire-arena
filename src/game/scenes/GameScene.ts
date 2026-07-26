@@ -48,7 +48,7 @@ export class GameScene extends Phaser.Scene {
   private effectLayer!: Phaser.GameObjects.Container;
   private uiLayer!: Phaser.GameObjects.Container;
   private blockSprites = new Map<string, Phaser.GameObjects.Container>();
-  private powerSprites = new Map<string, Phaser.GameObjects.Image>();
+  private powerSprites = new Map<string, Phaser.GameObjects.Container>();
   private frostZones = new Map<string, number>();
   private frostSprites = new Map<string, Phaser.GameObjects.Rectangle>();
   private shrineTimerMs = 15000;
@@ -356,9 +356,8 @@ export class GameScene extends Phaser.Scene {
   private spawnShard(pos: GridPosition): void {
     const w = this.grid.toWorld(pos);
     const id = `shard-${keyOf(pos)}`;
-    const s = this.add.image(w.x, w.y, 'crown-shard');
-    this.objectLayer.add(s);
-    this.powerSprites.set(id, s);
+    const view = this.createPickupView(w.x, w.y, 'crown-shard', 0xffe89a, true);
+    this.powerSprites.set(id, view);
   }
 
   private syncSprites(): void {
@@ -375,13 +374,59 @@ export class GameScene extends Phaser.Scene {
         const w = this.grid.toWorld(power.grid);
         const def = getPowerUp(power.type);
         const texture = this.textures.exists(def.assetKey) ? def.assetKey : 'power-fallback';
-        const sprite = this.add.image(w.x, w.y, texture);
-        sprite.setDisplaySize(42, 42);
-        this.objectLayer.add(sprite);
-        this.powerSprites.set(power.id, sprite);
-        this.tweens.add({ targets: sprite, y: w.y - 4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        this.powerSprites.set(power.id, this.createPickupView(w.x, w.y, texture, def.color));
       }
     }
+  }
+
+  private createPickupView(
+    x: number,
+    y: number,
+    texture: string,
+    color: number,
+    isShard = false
+  ): Phaser.GameObjects.Container {
+    const view = this.add.container(x, y);
+    const shadow = this.add.ellipse(0, 18, isShard ? 40 : 48, 15, 0x05050a, 0.66);
+    const pedestal = this.add.circle(0, 12, isShard ? 18 : 22, 0x11101a, 0.84)
+      .setStrokeStyle(2, color, 0.7);
+    const halo = this.add.circle(0, -2, isShard ? 20 : 25, color, 0.16)
+      .setStrokeStyle(2, color, 0.62)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const icon = this.add.image(0, -4, texture).setDisplaySize(isShard ? 34 : 46, isShard ? 34 : 46);
+    const glint = this.add.star(13, -18, 4, 2, 6, 0xffffff, 0.9)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    view.add([shadow, pedestal, halo, icon, glint]);
+    view.setDepth(5);
+    this.objectLayer.add(view);
+    this.tweens.add({
+      targets: icon,
+      y: -9,
+      angle: isShard ? 8 : 0,
+      duration: isShard ? 620 : 820,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut'
+    });
+    this.tweens.add({
+      targets: halo,
+      scale: 1.22,
+      alpha: 0.32,
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut'
+    });
+    this.tweens.add({
+      targets: glint,
+      angle: 180,
+      alpha: 0.18,
+      scale: 0.7,
+      duration: 900,
+      yoyo: true,
+      repeat: -1
+    });
+    return view;
   }
 
   private useSpecial(actor: Player): void {

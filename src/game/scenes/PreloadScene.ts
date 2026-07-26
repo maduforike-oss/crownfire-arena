@@ -16,6 +16,11 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('reference-character-power-atlas', 'assets/art/reference-character-power-atlas.png');
     this.load.image('champion-card-frame', 'assets/ui/champion_card_frame.png');
     this.load.image('champion-card-selected-frame', 'assets/ui/champion_card_selected_frame.png');
+    this.load.image('map-ashen-premium-floor', 'assets/maps/ashen/premium_floor_plate.webp');
+    this.load.image('map-ashen-premium-floor-glow', 'assets/maps/ashen/premium_floor_glow.webp');
+    this.load.image('map-ashen-premium-solid', 'assets/maps/ashen/premium_solid.png');
+    this.load.image('map-ashen-premium-block', 'assets/maps/ashen/premium_destructible.png');
+    this.load.image('map-ashen-premium-shrine', 'assets/maps/ashen/premium_shrine.png');
     for (const character of CHARACTERS) this.load.image(character.assetKey, character.portraitPath);
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);

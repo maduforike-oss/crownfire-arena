@@ -26,6 +26,7 @@ export class MapRenderer {
     const blockSprites = new Map<string, Phaser.GameObjects.Container>();
 
     this.renderBackplate(grid.map, boardBounds);
+    this.renderPremiumFloor(grid, layers.tileLayer, boardBounds);
     this.renderBorder(grid, layers.tileLayer);
 
     let shrine!: Phaser.GameObjects.Container;
@@ -35,6 +36,7 @@ export class MapRenderer {
         const world = grid.toWorld(pos);
         const floorKey = `map-${grid.map.id}-floor-${this.floorVariant(grid.map.id, x, y)}`;
         const floor = this.scene.add.image(world.x, world.y, floorKey).setDisplaySize(GAME_CONFIG.tileSize, GAME_CONFIG.tileSize);
+        if (grid.map.id === 'ashen') floor.setAlpha(0.17);
         layers.tileLayer.add(floor);
 
         if (grid.spawnReserved.has(keyOf(pos))) this.renderSpawnPad(grid, layers.tileLayer, pos, debugSpawnSafe);
@@ -79,6 +81,25 @@ export class MapRenderer {
     this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 16, bounds.height + 16, 0x08070b, 0.72)
       .setStrokeStyle(1, 0xd8a84e, 0.2)
       .setDepth(-1);
+  }
+
+  private renderPremiumFloor(grid: GridSystem, tileLayer: Phaser.GameObjects.Container, bounds: Phaser.Geom.Rectangle): void {
+    if (grid.map.id !== 'ashen' || !this.scene.textures.exists('map-ashen-premium-floor')) return;
+    const floor = this.scene.add.image(bounds.centerX, bounds.centerY, 'map-ashen-premium-floor')
+      .setDisplaySize(bounds.width, bounds.height);
+    const glow = this.scene.add.image(bounds.centerX, bounds.centerY, 'map-ashen-premium-floor-glow')
+      .setDisplaySize(bounds.width, bounds.height)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0.08);
+    tileLayer.add([floor, glow]);
+    this.scene.tweens.add({
+      targets: glow,
+      alpha: 0.14,
+      duration: 2200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut'
+    });
   }
 
   private renderBorder(grid: GridSystem, tileLayer: Phaser.GameObjects.Container): void {
@@ -130,7 +151,13 @@ export class MapRenderer {
     const world = grid.toWorld(pos);
     const theme = getMapTheme(grid.map.id);
     const shrine = this.scene.add.container(world.x, world.y);
-    shrine.add(this.scene.add.image(0, 0, `map-${grid.map.id}-shrine`).setDisplaySize(118, 118));
+    const premium = grid.map.id === 'ashen' && this.scene.textures.exists('map-ashen-premium-shrine');
+    if (premium) {
+      shrine.add(this.scene.add.ellipse(0, 22, 138, 52, 0x000000, 0.42));
+      shrine.add(this.scene.add.image(0, -4, 'map-ashen-premium-shrine').setDisplaySize(170, 170));
+    } else {
+      shrine.add(this.scene.add.image(0, 0, `map-${grid.map.id}-shrine`).setDisplaySize(118, 118));
+    }
     shrine.add(this.scene.add.circle(0, 0, 30, theme.accentColor, 0.08).setStrokeStyle(2, theme.accentColor, 0.42));
     tileLayer.add(shrine);
     this.scene.tweens.add({ targets: shrine, alpha: 0.72, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
@@ -141,7 +168,13 @@ export class MapRenderer {
     const world = grid.toWorld(pos);
     const theme = getMapTheme(grid.map.id);
     const wall = this.scene.add.container(world.x, world.y);
-    wall.add(this.scene.add.image(0, 0, `map-${grid.map.id}-solid`).setDisplaySize(53, 53));
+    const premium = grid.map.id === 'ashen' && this.scene.textures.exists('map-ashen-premium-solid');
+    if (premium) {
+      wall.add(this.scene.add.ellipse(0, 17, 53, 20, 0x000000, 0.5));
+      wall.add(this.scene.add.image(0, -10, 'map-ashen-premium-solid').setDisplaySize(76, 76));
+    } else {
+      wall.add(this.scene.add.image(0, 0, `map-${grid.map.id}-solid`).setDisplaySize(53, 53));
+    }
     if ((pos.x + pos.y) % 4 === 0) {
       wall.add(this.scene.add.circle(0, -12, 5, theme.accentColor, 0.24));
     }
@@ -151,7 +184,13 @@ export class MapRenderer {
   private renderDestructible(grid: GridSystem, pos: GridPosition): Phaser.GameObjects.Container {
     const world = grid.toWorld(pos);
     const block = this.scene.add.container(world.x, world.y);
-    block.add(this.scene.add.image(0, 0, `map-${grid.map.id}-block`).setDisplaySize(52, 52));
+    const premium = grid.map.id === 'ashen' && this.scene.textures.exists('map-ashen-premium-block');
+    if (premium) {
+      block.add(this.scene.add.ellipse(0, 17, 51, 18, 0x000000, 0.44));
+      block.add(this.scene.add.image(0, -7, 'map-ashen-premium-block').setDisplaySize(70, 70));
+    } else {
+      block.add(this.scene.add.image(0, 0, `map-${grid.map.id}-block`).setDisplaySize(52, 52));
+    }
     return block;
   }
 
