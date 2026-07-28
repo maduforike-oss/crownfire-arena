@@ -84,12 +84,12 @@ export class BombViewSystem {
         continue;
       }
       const theme = getBombTheme(bomb.themeId);
-      const urgency = 1 - bomb.remainingMs / GAME_CONFIG.bombFuseMs;
+      const urgency = bomb.remote ? 0 : 1 - bomb.remainingMs / GAME_CONFIG.bombFuseMs;
       view.sprite.setTint(bomb.remote ? 0xc050ff : urgency > 0.7 ? theme.tickTint : 0xffffff);
       view.ring.setStrokeStyle(urgency > 0.7 ? 3 : 2, bomb.remote ? 0xd28cff : theme.coreColor, 0.72 + urgency * 0.25);
       view.spark.setFillStyle(bomb.remote ? 0xd28cff : theme.coreColor, 0.95);
       view.label.setText(bomb.remote ? 'HEX' : `${Math.max(0, bomb.remainingMs / 1000).toFixed(1)}`);
-      if (urgency >= 0.68) {
+      if (!bomb.remote && urgency >= 0.68) {
         const alpha = 0.22 + urgency * 0.3;
         this.telegraphs.push(...this.explosionFx.renderTelegraph(bomb.previewTiles, theme, alpha));
         if (view.warnedStep < 0 && bomb.remainingMs < 620) {

@@ -8,7 +8,7 @@ export class DangerMapSystem {
   rebuild(bombs: Bomb[], blasts: GridPosition[]): void {
     this.dangerous.clear();
     for (const blast of blasts) this.dangerous.add(keyOf(blast));
-    const soon = bombs.filter((b) => b.remainingMs < 1050);
+    const soon = bombs.filter((bomb) => !bomb.remote && bomb.remainingMs < 1050);
     for (const bomb of soon) {
       for (const tile of bomb.previewTiles) this.dangerous.add(keyOf(tile));
     }

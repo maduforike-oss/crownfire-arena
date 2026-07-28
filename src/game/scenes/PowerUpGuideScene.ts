@@ -13,7 +13,7 @@ const EFFECTS: Record<string, string> = {
   frostSnare: 'Next bomb leaves slowing frost tiles.',
   ravenBlink: 'Blink up to 3 tiles in facing direction.',
   beastCall: 'Launches a green claw attack at the nearest rival.',
-  remoteHex: 'Universal pickup: arm 3 bombs, then press E or the purple HEX button to detonate.',
+  remoteHex: 'Arm 3 bombs indefinitely. Each E or HEX press detonates the oldest armed bomb.',
   crownSurge: 'Rare crown-star power: 9 seconds of blast immunity and contact damage.'
 };
 

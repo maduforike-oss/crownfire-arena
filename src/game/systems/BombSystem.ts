@@ -45,6 +45,8 @@ export class BombSystem {
   update(dt: number, actors: Player[]): Explosion[] {
     const created: Explosion[] = [];
     for (const bomb of [...this.bombs]) {
+      // Remote Hex suspends the fuse until the owner explicitly fires it.
+      if (bomb.remote) continue;
       bomb.remainingMs -= dt;
       if (bomb.remainingMs <= 0) created.push(this.detonate(bomb, actors));
     }
@@ -56,7 +58,10 @@ export class BombSystem {
   }
 
   detonateRemote(ownerId: string, actors: Player[]): Explosion[] {
-    return this.bombs.filter((b) => b.ownerId === ownerId && b.remote).map((b) => this.detonate(b, actors));
+    // The array preserves placement order: one press detonates the oldest
+    // armed bomb while later charges remain available for tactical sequencing.
+    const oldest = this.bombs.find((bomb) => bomb.ownerId === ownerId && bomb.remote);
+    return oldest ? [this.detonate(oldest, actors)] : [];
   }
 
   detonate(bomb: Bomb, actors: Player[]): Explosion {
@@ -71,7 +76,9 @@ export class BombSystem {
     const explosion = new Explosion(tiles, GAME_CONFIG.explosionMs, bomb.ownerId, bomb.frost, bomb.themeId);
     this.explosions.push(explosion);
     for (const other of [...this.bombs]) {
-      if (tiles.some((t) => sameTile(t, other.grid))) other.remainingMs = Math.min(other.remainingMs, 80);
+      if (!other.remote && tiles.some((t) => sameTile(t, other.grid))) {
+        other.remainingMs = Math.min(other.remainingMs, 80);
+      }
     }
     return explosion;
   }

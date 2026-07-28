@@ -20,7 +20,7 @@ export const POWER_UPS: PowerUpDef[] = [
   { id: 'frostSnare', name: 'Frost Snare', assetKey: 'power-frostSnare', iconPath: 'assets/powerups/frost_snare.png', color: 0x75d7ff, description: 'Next bomb leaves slowing frost', apply: (s) => ((s.nextBombFrostSnare = true), 'Next bomb: frost snare') },
   { id: 'ravenBlink', name: 'Raven Blink', assetKey: 'power-ravenBlink', iconPath: 'assets/powerups/raven_blink.png', color: 0x9e70ff, description: 'Blink up to 3 clear tiles', apply: () => 'Blinked up to 3 tiles' },
   { id: 'beastCall', name: 'Beast Call', assetKey: 'power-beastCall', iconPath: 'assets/powerups/beast_call.png', color: 0x8bd56f, description: 'Strike the nearest rival', apply: () => 'Beast spirit summoned' },
-  { id: 'remoteHex', name: 'Remote Hex', assetKey: 'power-remoteHex', iconPath: 'assets/powerups/remote_hex.png', color: 0xc050ff, description: 'Arm 3 bombs; detonate with E or HEX', apply: (s) => ((s.hasRemoteDetonator = true), (s.remoteCharges += 3), '3 remote bombs - use E / HEX') },
+  { id: 'remoteHex', name: 'Remote Hex', assetKey: 'power-remoteHex', iconPath: 'assets/powerups/remote_hex.png', color: 0xc050ff, description: 'Arm 3 bombs indefinitely; HEX detonates the oldest', apply: (s) => ((s.hasRemoteDetonator = true), (s.remoteCharges += 3), 'Remote x3 - HEX fires oldest first') },
   { id: 'crownSurge', name: 'Champion Surge', assetKey: 'power-crownSurge', iconPath: '', color: 0xfff0a0, description: 'Invincible contact power for 9 seconds', apply: (s) => ((s.championSurgeMs = 9000), 'Invincible crown power - 9s') }
 ];
 

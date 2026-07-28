@@ -21,11 +21,11 @@ export function getDeviceProfile(): DeviceProfile {
   const tablet = touch && shortEdge >= 600;
   const phone = touch && !tablet;
   const aspectRatio = width / height;
-  const matchZoom = !touch
-    ? 1
-    : aspectRatio < 1.55
-      ? 1.15
-      : 1;
+  // Phaser's FIT scale already chooses the largest undistorted 16:9 canvas.
+  // Extra CSS zoom on 4:3 tablets cropped the control gutters and pause button;
+  // keep the complete arena visible and let the cinematic shell fill letterbox
+  // space instead.
+  const matchZoom = 1;
 
   return {
     touch,

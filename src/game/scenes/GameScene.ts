@@ -28,6 +28,7 @@ import { BombViewSystem } from '../systems/BombViewSystem';
 import { TouchController } from '../controllers/TouchController';
 import { POWER_UPS } from '../config/PowerUps';
 import { setMatchPresentation, type DeviceProfile } from '../systems/DeviceProfile';
+import { menuButton } from '../ui/MenuButton';
 
 export class GameScene extends Phaser.Scene {
   private grid!: GridSystem;
@@ -1090,18 +1091,47 @@ export class GameScene extends Phaser.Scene {
 
   private togglePause(): void {
     if (this.pausedText) {
-      this.pausedText.destroy();
-      this.pausedText = undefined;
-      this.paused = false;
+      this.closePauseOverlay();
       return;
     }
-    const bg = this.add.rectangle(640, 360, 430, 190, 0x111018, 0.97).setStrokeStyle(2, 0xd8a84e);
-    const label = this.add.text(640, 330, 'Trial Paused', { fontFamily: 'Georgia', fontSize: '38px', color: '#f7d783' }).setOrigin(0.5);
-    const hint = this.add.text(640, 388, 'ESC  Resume     R  Restart     Q  Main Menu', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '15px', color: '#b5a995' }).setOrigin(0.5);
-    this.pausedText = this.add.container(0, 0, [bg, label, hint]).setDepth(50);
+    const shade = this.add.rectangle(640, 360, 1280, 720, 0x05060a, 0.76).setInteractive();
+    const bg = this.add.rectangle(640, 360, 500, 390, 0x111018, 0.98).setStrokeStyle(2, 0xd8a84e);
+    const label = this.add.text(640, 222, 'Trial Paused', {
+      fontFamily: 'Georgia',
+      fontSize: '38px',
+      color: '#f7d783'
+    }).setOrigin(0.5);
+    const hint = this.add.text(640, 266, 'Resume, reset the arena, or return to the crown hall.', {
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fontSize: '14px',
+      color: '#b5a995'
+    }).setOrigin(0.5);
+    const resume = menuButton(this, 640, 326, 'Resume', () => this.closePauseOverlay(), false, 320);
+    const restart = menuButton(this, 640, 394, 'Restart Trial', () => this.restartTrial(), false, 320);
+    const menu = menuButton(this, 640, 462, 'Main Menu', () => this.returnToMainMenu(), false, 320);
+    this.pausedText = this.add.container(0, 0, [shade, bg, label, hint, resume, restart, menu]).setDepth(240);
     this.paused = true;
-    this.input.keyboard!.once('keydown-R', () => this.scene.restart());
-    this.input.keyboard!.once('keydown-Q', () => this.scene.start('MainMenuScene'));
+    this.input.keyboard?.once('keydown-R', this.restartTrial, this);
+    this.input.keyboard?.once('keydown-Q', this.returnToMainMenu, this);
+  }
+
+  private closePauseOverlay(): void {
+    this.input.keyboard?.off('keydown-R', this.restartTrial, this);
+    this.input.keyboard?.off('keydown-Q', this.returnToMainMenu, this);
+    this.pausedText?.destroy(true);
+    this.pausedText = undefined;
+    this.paused = false;
+  }
+
+  private restartTrial(): void {
+    this.closePauseOverlay();
+    this.scene.restart();
+  }
+
+  private returnToMainMenu(): void {
+    this.closePauseOverlay();
+    this.scene.start('MainMenuScene');
   }
 
   private finish(won: boolean, reason: string): void {
@@ -1167,6 +1197,8 @@ export class GameScene extends Phaser.Scene {
 
   private shutdown(): void {
     setMatchPresentation(false);
+    this.input.keyboard?.off('keydown-R', this.restartTrial, this);
+    this.input.keyboard?.off('keydown-Q', this.returnToMainMenu, this);
     this.bombViews?.cleanup();
     this.tweens.killAll();
     this.input.keyboard?.removeAllListeners();
