@@ -12,6 +12,7 @@ type SfxKey =
   | 'frost'
   | 'blink'
   | 'beast'
+  | 'dragonBlast'
   | 'surge'
   | 'damage'
   | 'defeat'
@@ -144,6 +145,11 @@ export class AudioSystem {
     if (key === 'frost') this.chime(now, [740, 622, 554], 0.09);
     if (key === 'blink') this.chime(now, [880, 660, 990], 0.055);
     if (key === 'beast') this.tone(now, 138, 0.15, 'sawtooth', 0.22);
+    if (key === 'dragonBlast') {
+      this.tone(now, 96, 0.28, 'sawtooth', 0.32);
+      this.tone(now + 0.035, 192, 0.24, 'square', 0.13);
+      this.noise(now + 0.02, 0.24, 0.32, 1450);
+    }
     if (key === 'surge') this.chime(now, [392, 523, 659, 880], 0.12);
     if (key === 'damage') this.tone(now, 128, 0.09, 'sawtooth', 0.28);
     if (key === 'defeat') this.chime(now, [220, 175, 130], 0.16);

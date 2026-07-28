@@ -29,6 +29,7 @@ import { TouchController } from '../controllers/TouchController';
 import { POWER_UPS } from '../config/PowerUps';
 import { setMatchPresentation, type DeviceProfile } from '../systems/DeviceProfile';
 import { menuButton } from '../ui/MenuButton';
+import { DragonBlastVfxSystem } from '../systems/DragonBlastVfxSystem';
 
 export class GameScene extends Phaser.Scene {
   private grid!: GridSystem;
@@ -42,6 +43,7 @@ export class GameScene extends Phaser.Scene {
   private ai = new AIController();
   private animation!: AnimationSystem;
   private explosionFx!: ExplosionSystem;
+  private dragonBlastFx!: DragonBlastVfxSystem;
   private bombViews!: BombViewSystem;
   private hud!: HUD;
   private player!: Player;
@@ -101,6 +103,7 @@ export class GameScene extends Phaser.Scene {
     this.uiLayer.setDepth(100);
     this.animation = new AnimationSystem(this);
     this.explosionFx = new ExplosionSystem(this, this.grid, this.effectLayer);
+    this.dragonBlastFx = new DragonBlastVfxSystem(this, this.grid, this.effectLayer);
     this.bombViews = new BombViewSystem(this, this.grid, this.objectLayer, this.explosionFx);
     this.drawArena();
     this.powers.seedInitial(SESSION.mode === 'sandbox' ? 0 : SESSION.mode === 'classic' ? 5 : 7);
@@ -785,7 +788,6 @@ export class GameScene extends Phaser.Scene {
 
   private dragonBlast(actor: Player): void {
     const direction = actor.lastDir.x === 0 && actor.lastDir.y === 0 ? { x: 0, y: 1 } : actor.lastDir;
-    const origin = this.grid.toWorld(actor.grid);
     const tiles: GridPosition[] = [];
     for (let step = 1; step <= 6; step += 1) {
       const tile = {
@@ -804,68 +806,13 @@ export class GameScene extends Phaser.Scene {
 
     this.floatText(actor.world.x, actor.world.y - 54, `Dragon Blast - range ${tiles.length}`, '#ffb36b');
     this.specialPulse(actor, 0xff6a2b);
-    const telegraph: Phaser.GameObjects.Container[] = [];
-    for (const tile of tiles) {
-      const world = this.grid.toWorld(tile);
-      const warning = this.add.container(world.x, world.y);
-      const plate = this.add.rectangle(0, 0, GAME_CONFIG.tileSize - 7, GAME_CONFIG.tileSize - 7, 0xff4b1f, 0.16)
-        .setStrokeStyle(2, 0xffb14a, 0.84);
-      const rune = this.add.image(0, 0, 'blast-fire').setDisplaySize(39, 39).setTint(0xff8a2b).setAlpha(0.4);
-      const arrow = direction.x !== 0
-        ? this.add.triangle(0, 0, -8 * direction.x, -7, 10 * direction.x, 0, -8 * direction.x, 7, 0xffe0a3, 0.86)
-        : this.add.triangle(0, 0, -7, -8 * direction.y, 0, 10 * direction.y, 7, -8 * direction.y, 0xffe0a3, 0.86);
-      warning.add([plate, rune, arrow]);
-      this.effectLayer.add(warning);
-      this.tweens.add({ targets: warning, alpha: 0.62, scale: 1.05, duration: 120, yoyo: true, repeat: 2 });
-      telegraph.push(warning);
-    }
+    const telegraph = this.dragonBlastFx.telegraph(actor.grid, tiles, direction);
     AudioSystem.get().sfx('tick');
 
-    this.time.delayedCall(420, () => {
+    this.time.delayedCall(380, () => {
       telegraph.forEach((item) => item.destroy());
       if (!actor.alive || this.ended) return;
-      const end = this.grid.toWorld(tiles[tiles.length - 1]);
-      const horizontal = direction.x !== 0;
-        const length = Math.hypot(end.x - origin.x, end.y - origin.y) + GAME_CONFIG.tileSize;
-        const centerX = (origin.x + end.x) / 2;
-        const centerY = (origin.y + end.y) / 2;
-      const beam = this.add.rectangle(
-        centerX,
-        centerY,
-        horizontal ? length : 30,
-        horizontal ? 30 : length,
-        0xff5a20,
-        0.72
-      ).setBlendMode(Phaser.BlendModes.ADD);
-      const core = this.add.rectangle(
-        centerX,
-        centerY,
-        horizontal ? length : 10,
-        horizontal ? 10 : length,
-        0xfff1c0,
-        0.94
-      ).setBlendMode(Phaser.BlendModes.ADD);
-      this.effectLayer.add([beam, core]);
-      this.cameras.main.shake(150, 0.008);
-
-      for (const tile of tiles) {
-        const world = this.grid.toWorld(tile);
-        const flame = this.add.image(world.x, world.y, 'blast-fire').setDisplaySize(56, 56).setAlpha(0.96);
-        this.effectLayer.add(flame);
-        this.tweens.add({ targets: flame, scale: 1.35, alpha: 0, duration: 420, ease: 'Cubic.easeOut', onComplete: () => flame.destroy() });
-        for (let sparkIndex = 0; sparkIndex < 4; sparkIndex += 1) {
-          const spark = this.add.circle(world.x, world.y, Phaser.Math.Between(2, 4), sparkIndex % 2 ? 0xfff0a0 : 0xff6a2b, 0.9);
-          this.effectLayer.add(spark);
-          this.tweens.add({
-            targets: spark,
-            x: world.x + Phaser.Math.Between(-25, 25),
-            y: world.y + Phaser.Math.Between(-22, 22),
-            alpha: 0,
-            duration: 360,
-            onComplete: () => spark.destroy()
-          });
-        }
-      }
+      this.dragonBlastFx.fire(actor.grid, tiles, direction);
 
       for (const target of this.actors) {
         if (target === actor || !target.alive || !tiles.some((tile) => sameTile(tile, target.grid))) continue;
@@ -873,19 +820,7 @@ export class GameScene extends Phaser.Scene {
         this.damageActor(target, actor.id);
         if (target.stats.health < healthBefore) this.floatText(target.world.x, target.world.y - 68, 'Dragonfire hit', '#ffb36b');
       }
-      AudioSystem.get().sfx('explosion');
-      this.tweens.add({
-        targets: [beam, core],
-        alpha: 0,
-        scaleX: horizontal ? 1.06 : 0.72,
-        scaleY: horizontal ? 0.72 : 1.06,
-        duration: 340,
-        ease: 'Cubic.easeOut',
-        onComplete: () => {
-          beam.destroy();
-          core.destroy();
-        }
-      });
+      AudioSystem.get().sfx('dragonBlast');
     });
   }
 
