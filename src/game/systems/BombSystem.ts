@@ -25,7 +25,10 @@ export class BombSystem {
     bomb.remote = actor.stats.hasRemoteDetonator && actor.stats.remoteCharges > 0;
     bomb.frost = actor.stats.nextBombFrostSnare;
     bomb.dragonCore = actor.stats.nextBombDragonCore;
-    if (bomb.remote) actor.stats.remoteCharges = Math.max(0, actor.stats.remoteCharges - 1);
+    if (bomb.remote) {
+      actor.stats.remoteCharges = Math.max(0, actor.stats.remoteCharges - 1);
+      actor.stats.remoteArmedBombs += 1;
+    }
     if (actor.stats.remoteCharges <= 0) actor.stats.hasRemoteDetonator = false;
     actor.stats.nextBombDragonCore = false;
     actor.stats.nextBombFrostSnare = false;
@@ -60,7 +63,10 @@ export class BombSystem {
     const idx = this.bombs.indexOf(bomb);
     if (idx >= 0) this.bombs.splice(idx, 1);
     const owner = actors.find((a) => a.id === bomb.ownerId);
-    if (owner) owner.stats.activeBombs = Math.max(0, owner.stats.activeBombs - 1);
+    if (owner) {
+      owner.stats.activeBombs = Math.max(0, owner.stats.activeBombs - 1);
+      if (bomb.remote) owner.stats.remoteArmedBombs = Math.max(0, owner.stats.remoteArmedBombs - 1);
+    }
     const tiles = this.computeBlast(bomb.grid, bomb.radius);
     const explosion = new Explosion(tiles, GAME_CONFIG.explosionMs, bomb.ownerId, bomb.frost, bomb.themeId);
     this.explosions.push(explosion);

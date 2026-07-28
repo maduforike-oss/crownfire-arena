@@ -35,12 +35,14 @@ export function baseStats(): Stats {
     moveSpeed: 148,
     invulnerabilityMs: 1000,
     shielded: false,
+    shieldMs: 0,
     hasBombKick: false,
     hasRemoteDetonator: false,
     temporaryGhostMode: 0,
     temporarySpeedBoost: 0,
     championSurgeMs: 0,
     remoteCharges: 0,
+    remoteArmedBombs: 0,
     nextBombDragonCore: false,
     nextBombFrostSnare: false
   };
@@ -71,7 +73,7 @@ export const CHARACTERS: CharacterDef[] = [
     accentColor: 0xffa33d,
     description: 'fire royal bloodline',
     passiveText: '+1 blast radius',
-    specialName: 'Dragonflame Surge',
+    specialName: 'Dragon Blast',
     stats: { blastRadius: 3 },
     implemented: true,
     apply: (s) => {
@@ -104,13 +106,11 @@ export const CHARACTERS: CharacterDef[] = [
     bombVisualThemeId: 'frost',
     accentColor: 0x92ecff,
     description: 'northern control magic',
-    passiveText: 'bombs can snare',
-    specialName: 'Frost Snare',
+    passiveText: 'ice-resistant warden',
+    specialName: 'Ice Feet',
     stats: {},
     implemented: true,
-    apply: (s) => {
-      s.nextBombFrostSnare = true;
-    }
+    apply: () => {}
   }),
   character({
     id: 'veil',

@@ -6,15 +6,15 @@ import { addSceneBackdrop, addScreenTitle } from '../ui/ScenePresentation';
 const EFFECTS: Record<string, string> = {
   ember: 'Permanent +1 blast radius.',
   twin: 'Permanent +1 max rune bomb.',
-  wolfSprint: '35% speed boost for 6 seconds.',
-  stoneguard: 'Gain a shield. If shielded, heal 1 health.',
+  wolfSprint: '35% speed boost for 8 seconds.',
+  stoneguard: 'Absorb one hit for 12 seconds. If wounded, restore 1 health instead.',
   dragonCore: 'Next bomb gains +1 temporary radius.',
-  ghostVeil: 'Immune to bomb damage for 4 seconds.',
+  ghostVeil: 'Immune to bomb damage for 5.5 seconds.',
   frostSnare: 'Next bomb leaves slowing frost tiles.',
   ravenBlink: 'Blink up to 3 tiles in facing direction.',
   beastCall: 'Launches a green claw attack at the nearest rival.',
-  remoteHex: 'Next 3 bombs can be detonated with E.',
-  crownSurge: 'Rare crown-star power: immune to blasts and damage rivals by touching them.'
+  remoteHex: 'Universal pickup: arm 3 bombs, then press E or the purple HEX button to detonate.',
+  crownSurge: 'Rare crown-star power: 9 seconds of blast immunity and contact damage.'
 };
 
 const TAGS: Record<string, string> = {

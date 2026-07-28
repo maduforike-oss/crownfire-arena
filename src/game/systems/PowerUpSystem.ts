@@ -92,6 +92,7 @@ export class PowerUpSystem {
       'ravenBlink',
       'beastCall',
       'remoteHex',
+      'remoteHex',
       ...(Math.random() < 0.045 ? (['crownSurge'] as PowerUpType[]) : [])
     ];
     return choice(pool);

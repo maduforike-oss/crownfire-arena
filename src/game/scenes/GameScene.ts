@@ -51,7 +51,8 @@ export class GameScene extends Phaser.Scene {
   private blockSprites = new Map<string, Phaser.GameObjects.Container>();
   private powerSprites = new Map<string, Phaser.GameObjects.Container>();
   private frostZones = new Map<string, number>();
-  private frostSprites = new Map<string, Phaser.GameObjects.Rectangle>();
+  private frostZoneOwners = new Map<string, string>();
+  private frostSprites = new Map<string, Phaser.GameObjects.Container>();
   private shrineTimerMs = 15000;
   private shrineTile!: GridPosition;
   private shrineCountdown?: Phaser.GameObjects.Arc;
@@ -177,6 +178,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHuman(dt: number): void {
+    this.touch?.setRemoteAvailable(this.player.stats.remoteArmedBombs);
     const touchDirection = this.touch?.direction() ?? 'none';
     this.moveActor(this.player, touchDirection !== 'none' ? touchDirection : this.human.direction(), dt);
     if (this.human.consumeBomb() || this.touch?.consumeBomb()) this.placeBomb(this.player);
@@ -226,13 +228,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private moveActor(actor: Player, dir: Direction, dt: number): void {
-    if (!actor.alive || dir === 'none') return;
+    if (!actor.alive) return;
+    this.applyFrostZoneToActor(actor);
+    if (actor.snaredMs > 0 || dir === 'none') return;
     const d = dir === 'up' ? { x: 0, y: -1 } : dir === 'down' ? { x: 0, y: 1 } : dir === 'left' ? { x: -1, y: 0 } : { x: 1, y: 0 };
     actor.lastDir = d;
-    if (this.frostZones.has(keyOf(actor.grid))) actor.slowedMs = Math.max(actor.slowedMs, 450);
+    const previousGrid = { ...actor.grid };
     const surgeBoost = actor.stats.championSurgeMs > 0 ? 18 : 0;
     const speedBoost = actor.stats.temporarySpeedBoost > 0 ? actor.stats.moveSpeed * 0.35 : 0;
-    const speed = (actor.stats.moveSpeed + speedBoost + surgeBoost) * (actor.slowedMs > 0 ? 0.6 : 1);
+    const speed = (actor.stats.moveSpeed + speedBoost + surgeBoost) * (actor.slowedMs > 0 ? 0.52 : 1);
     const nextWorld = { x: actor.world.x + d.x * speed * dt / 1000, y: actor.world.y + d.y * speed * dt / 1000 };
     const nextGrid = this.grid.toGrid(nextWorld);
     if (!sameTile(nextGrid, actor.grid)) {
@@ -246,6 +250,10 @@ export class GameScene extends Phaser.Scene {
     const bounds = this.grid.toWorld(actor.grid);
     actor.world.x = clamp(actor.world.x, bounds.x - 24, bounds.x + 24);
     actor.world.y = clamp(actor.world.y, bounds.y - 24, bounds.y + 24);
+    if (!sameTile(previousGrid, actor.grid) && actor.frostTrailMs > 0) {
+      this.addFrostZone(previousGrid, 4200, actor.id);
+      this.addFrostZone(actor.grid, 4200, actor.id);
+    }
     this.animation.emitFootstep(actor);
   }
 
@@ -289,7 +297,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (explosion.frost) {
-      for (const tile of explosion.tiles) this.frostZones.set(keyOf(tile), 3000);
+      for (const tile of explosion.tiles) this.addFrostZone(tile, 3000, explosion.ownerId);
     }
     AudioSystem.get().sfx('explosion');
   }
@@ -309,6 +317,7 @@ export class GameScene extends Phaser.Scene {
     if (actor.invulnerableMs > 0 || actor.stats.temporaryGhostMode > 0 || actor.stats.championSurgeMs > 0) return;
     if (actor.stats.shielded) {
       actor.stats.shielded = false;
+      actor.stats.shieldMs = 0;
       actor.invulnerableMs = 500;
       this.floatText(actor.world.x, actor.world.y - 42, 'Shield', '#f7d783');
       this.animation.shieldBreak(actor);
@@ -436,10 +445,8 @@ export class GameScene extends Phaser.Scene {
     const view = this.views.get(actor.id);
     actor.specialCooldownMs = 6500;
     if (actor.character === 'dragon') {
-      actor.stats.nextBombDragonCore = true;
       actor.specialCooldownMs = 10000;
-      this.floatText(actor.world.x, actor.world.y - 50, 'Dragonflame', '#ff9f4b');
-      this.specialPulse(actor, 0xff6a2b);
+      this.dragonBlast(actor);
       if (view) this.animation.playSpecial(actor, view, 0xff6a2b);
       AudioSystem.get().sfx('surge');
     } else if (actor.character === 'wolf') {
@@ -452,8 +459,9 @@ export class GameScene extends Phaser.Scene {
       AudioSystem.get().sfx('blink');
     } else if (actor.character === 'frost') {
       actor.specialCooldownMs = 10000;
-      actor.stats.nextBombFrostSnare = true;
-      this.floatText(actor.world.x, actor.world.y - 50, 'Frost Snare', '#82e8ff');
+      actor.frostTrailMs = 5000;
+      this.addFrostZone(actor.grid, 4200, actor.id);
+      this.floatText(actor.world.x, actor.world.y - 50, 'Ice Feet - 5s', '#82e8ff');
       this.specialPulse(actor, 0x82e8ff);
       if (view) this.animation.playSpecial(actor, view, 0x82e8ff);
       AudioSystem.get().sfx('frost');
@@ -474,7 +482,8 @@ export class GameScene extends Phaser.Scene {
     } else if (actor.character === 'stone') {
       actor.specialCooldownMs = 12000;
       actor.stats.shielded = true;
-      this.floatText(actor.world.x, actor.world.y - 50, 'Shield', '#f7d783');
+      actor.stats.shieldMs = 10000;
+      this.floatText(actor.world.x, actor.world.y - 50, 'Shield active - 10s', '#f7d783');
       this.specialPulse(actor, 0xf0ca73);
       if (view) this.animation.playSpecial(actor, view, 0xf0ca73);
       AudioSystem.get().sfx('shield');
@@ -495,14 +504,23 @@ export class GameScene extends Phaser.Scene {
 
   private tickStatuses(dt: number): void {
     for (const actor of this.actors) {
+      const shieldWasActive = actor.stats.shielded;
       actor.invulnerableMs = Math.max(0, actor.invulnerableMs - dt);
       actor.slowedMs = Math.max(0, actor.slowedMs - dt);
+      actor.snaredMs = Math.max(0, actor.snaredMs - dt);
+      actor.frostImmunityMs = Math.max(0, actor.frostImmunityMs - dt);
+      actor.frostTrailMs = Math.max(0, actor.frostTrailMs - dt);
       actor.specialCooldownMs = Math.max(0, actor.specialCooldownMs - dt);
       actor.lastPowerUpMs = Math.max(0, actor.lastPowerUpMs - dt);
       if (actor.lastPowerUpMs <= 0) actor.lastPowerUp = undefined;
       actor.stats.temporaryGhostMode = Math.max(0, actor.stats.temporaryGhostMode - dt);
       actor.stats.temporarySpeedBoost = Math.max(0, actor.stats.temporarySpeedBoost - dt);
       actor.stats.championSurgeMs = Math.max(0, actor.stats.championSurgeMs - dt);
+      actor.stats.shieldMs = Math.max(0, actor.stats.shieldMs - dt);
+      if (shieldWasActive && actor.stats.shieldMs <= 0) {
+        actor.stats.shielded = false;
+        this.floatText(actor.world.x, actor.world.y - 46, 'Shield faded', '#d6c8a4');
+      }
     }
   }
 
@@ -669,6 +687,7 @@ export class GameScene extends Phaser.Scene {
       const next = ms - dt;
       if (next <= 0) {
         this.frostZones.delete(key);
+        this.frostZoneOwners.delete(key);
         this.frostSprites.get(key)?.destroy();
         this.frostSprites.delete(key);
       } else {
@@ -676,13 +695,39 @@ export class GameScene extends Phaser.Scene {
         if (!this.frostSprites.has(key)) {
           const [x, y] = key.split(',').map(Number);
           const w = this.grid.toWorld({ x, y });
-          const frost = this.add.rectangle(w.x, w.y, GAME_CONFIG.tileSize - 12, GAME_CONFIG.tileSize - 12, 0x75d7ff, 0.18)
-            .setStrokeStyle(1, 0xd8f7ff, 0.45);
+          const frost = this.add.container(w.x, w.y);
+          const tile = this.add.rectangle(0, 0, GAME_CONFIG.tileSize - 8, GAME_CONFIG.tileSize - 8, 0x75d7ff, 0.16)
+            .setStrokeStyle(2, 0xd8f7ff, 0.58);
+          const rune = this.add.image(0, 0, 'blast-frost').setDisplaySize(42, 42).setAlpha(0.48);
+          const shardA = this.add.triangle(-12, 9, 0, -12, 5, 8, -5, 8, 0xd8f7ff, 0.72);
+          const shardB = this.add.triangle(13, 11, 0, -9, 4, 7, -4, 7, 0x75d7ff, 0.78);
+          frost.add([tile, rune, shardA, shardB]);
           this.effectLayer.add(frost);
+          this.tweens.add({ targets: rune, alpha: 0.7, scale: 1.08, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
           this.frostSprites.set(key, frost);
         }
+        if (next < 650) this.frostSprites.get(key)?.setAlpha(Math.max(0, next / 650));
       }
     }
+  }
+
+  private addFrostZone(tile: GridPosition, durationMs: number, ownerId: string): void {
+    if (!this.grid.inBounds(tile) || this.grid.get(tile) !== 'empty') return;
+    const key = keyOf(tile);
+    this.frostZones.set(key, Math.max(durationMs, this.frostZones.get(key) ?? 0));
+    this.frostZoneOwners.set(key, ownerId);
+  }
+
+  private applyFrostZoneToActor(actor: Player): void {
+    const key = keyOf(actor.grid);
+    if (!this.frostZones.has(key) || this.frostZoneOwners.get(key) === actor.id || actor.frostImmunityMs > 0) return;
+    actor.snaredMs = 720;
+    actor.slowedMs = 2400;
+    actor.frostImmunityMs = 2900;
+    this.floatText(actor.world.x, actor.world.y - 50, 'Icebound - break free!', '#d8f7ff');
+    this.specialPulse(actor, 0x75d7ff);
+    this.animation.emitPickupBurst(actor, 0x75d7ff, 10);
+    AudioSystem.get().sfx('frost');
   }
 
   private resolveChampionSurgeTouches(): void {
@@ -696,6 +741,112 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  private dragonBlast(actor: Player): void {
+    const direction = actor.lastDir.x === 0 && actor.lastDir.y === 0 ? { x: 0, y: 1 } : actor.lastDir;
+    const origin = this.grid.toWorld(actor.grid);
+    const tiles: GridPosition[] = [];
+    for (let step = 1; step <= 6; step += 1) {
+      const tile = {
+        x: actor.grid.x + direction.x * step,
+        y: actor.grid.y + direction.y * step
+      };
+      if (!this.grid.inBounds(tile) || this.grid.get(tile) !== 'empty') break;
+      tiles.push(tile);
+    }
+
+    if (!tiles.length) {
+      this.floatText(actor.world.x, actor.world.y - 52, 'Dragon Blast blocked', '#ffb36b');
+      this.specialPulse(actor, 0xff6a2b);
+      return;
+    }
+
+    this.floatText(actor.world.x, actor.world.y - 54, `Dragon Blast - range ${tiles.length}`, '#ffb36b');
+    this.specialPulse(actor, 0xff6a2b);
+    const telegraph: Phaser.GameObjects.Container[] = [];
+    for (const tile of tiles) {
+      const world = this.grid.toWorld(tile);
+      const warning = this.add.container(world.x, world.y);
+      const plate = this.add.rectangle(0, 0, GAME_CONFIG.tileSize - 7, GAME_CONFIG.tileSize - 7, 0xff4b1f, 0.16)
+        .setStrokeStyle(2, 0xffb14a, 0.84);
+      const rune = this.add.image(0, 0, 'blast-fire').setDisplaySize(39, 39).setTint(0xff8a2b).setAlpha(0.4);
+      const arrow = direction.x !== 0
+        ? this.add.triangle(0, 0, -8 * direction.x, -7, 10 * direction.x, 0, -8 * direction.x, 7, 0xffe0a3, 0.86)
+        : this.add.triangle(0, 0, -7, -8 * direction.y, 0, 10 * direction.y, 7, -8 * direction.y, 0xffe0a3, 0.86);
+      warning.add([plate, rune, arrow]);
+      this.effectLayer.add(warning);
+      this.tweens.add({ targets: warning, alpha: 0.62, scale: 1.05, duration: 120, yoyo: true, repeat: 2 });
+      telegraph.push(warning);
+    }
+    AudioSystem.get().sfx('tick');
+
+    this.time.delayedCall(420, () => {
+      telegraph.forEach((item) => item.destroy());
+      if (!actor.alive || this.ended) return;
+      const end = this.grid.toWorld(tiles[tiles.length - 1]);
+      const horizontal = direction.x !== 0;
+        const length = Math.hypot(end.x - origin.x, end.y - origin.y) + GAME_CONFIG.tileSize;
+        const centerX = (origin.x + end.x) / 2;
+        const centerY = (origin.y + end.y) / 2;
+      const beam = this.add.rectangle(
+        centerX,
+        centerY,
+        horizontal ? length : 30,
+        horizontal ? 30 : length,
+        0xff5a20,
+        0.72
+      ).setBlendMode(Phaser.BlendModes.ADD);
+      const core = this.add.rectangle(
+        centerX,
+        centerY,
+        horizontal ? length : 10,
+        horizontal ? 10 : length,
+        0xfff1c0,
+        0.94
+      ).setBlendMode(Phaser.BlendModes.ADD);
+      this.effectLayer.add([beam, core]);
+      this.cameras.main.shake(150, 0.008);
+
+      for (const tile of tiles) {
+        const world = this.grid.toWorld(tile);
+        const flame = this.add.image(world.x, world.y, 'blast-fire').setDisplaySize(56, 56).setAlpha(0.96);
+        this.effectLayer.add(flame);
+        this.tweens.add({ targets: flame, scale: 1.35, alpha: 0, duration: 420, ease: 'Cubic.easeOut', onComplete: () => flame.destroy() });
+        for (let sparkIndex = 0; sparkIndex < 4; sparkIndex += 1) {
+          const spark = this.add.circle(world.x, world.y, Phaser.Math.Between(2, 4), sparkIndex % 2 ? 0xfff0a0 : 0xff6a2b, 0.9);
+          this.effectLayer.add(spark);
+          this.tweens.add({
+            targets: spark,
+            x: world.x + Phaser.Math.Between(-25, 25),
+            y: world.y + Phaser.Math.Between(-22, 22),
+            alpha: 0,
+            duration: 360,
+            onComplete: () => spark.destroy()
+          });
+        }
+      }
+
+      for (const target of this.actors) {
+        if (target === actor || !target.alive || !tiles.some((tile) => sameTile(tile, target.grid))) continue;
+        const healthBefore = target.stats.health;
+        this.damageActor(target, actor.id);
+        if (target.stats.health < healthBefore) this.floatText(target.world.x, target.world.y - 68, 'Dragonfire hit', '#ffb36b');
+      }
+      AudioSystem.get().sfx('explosion');
+      this.tweens.add({
+        targets: [beam, core],
+        alpha: 0,
+        scaleX: horizontal ? 1.06 : 0.72,
+        scaleY: horizontal ? 0.72 : 1.06,
+        duration: 340,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          beam.destroy();
+          core.destroy();
+        }
+      });
+    });
   }
 
   private blinkActor(actor: Player, maxTiles: number, color: number, canHopBlocks: boolean): void {
@@ -869,6 +1020,7 @@ export class GameScene extends Phaser.Scene {
     this.blockSprites.clear();
     this.powerSprites.clear();
     this.frostZones.clear();
+    this.frostZoneOwners.clear();
     this.frostSprites.clear();
   }
 

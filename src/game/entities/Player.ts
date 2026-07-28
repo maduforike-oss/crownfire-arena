@@ -7,6 +7,9 @@ export class Player {
   kills = 0;
   shards = 0;
   slowedMs = 0;
+  snaredMs = 0;
+  frostImmunityMs = 0;
+  frostTrailMs = 0;
   specialCooldownMs = 0;
   lastPowerUp?: PowerUpType;
   lastPowerUpMs = 0;
