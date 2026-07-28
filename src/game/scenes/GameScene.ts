@@ -15,7 +15,7 @@ import { DangerMapSystem } from '../systems/DangerMapSystem';
 import { ModeSystem } from '../systems/ModeSystem';
 import { awardMatch } from '../systems/RewardSystem';
 import { HumanController } from '../controllers/HumanController';
-import { AIController } from '../controllers/AIController';
+import { AIController, type BotIntent } from '../controllers/AIController';
 import { HUD } from '../ui/HUD';
 import { AnimationSystem, type ActorVisual } from '../systems/AnimationSystem';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
@@ -23,6 +23,7 @@ import { getBombTheme } from '../config/BombVisualThemes';
 import { getMapTheme } from '../config/MapThemes';
 import { MapRenderer } from '../systems/MapRenderer';
 import { AudioSystem } from '../systems/AudioSystem';
+import { MatchTelemetrySystem } from '../systems/MatchTelemetrySystem';
 import { BombViewSystem } from '../systems/BombViewSystem';
 import { TouchController } from '../controllers/TouchController';
 import { POWER_UPS } from '../config/PowerUps';
@@ -246,16 +247,16 @@ export class GameScene extends Phaser.Scene {
     for (const bot of this.actors.filter((a): a is Bot => a instanceof Bot && a.alive)) {
       if (this.spawnGraceMs > 0) continue;
       bot.thinkMs -= dt;
-      let intent = { dir: 'none' as Direction, placeBomb: false };
+      let intent: BotIntent = { dir: 'none' as Direction, placeBomb: false };
       if (bot.thinkMs <= 0 || distance(bot.grid, this.player.grid) < 4) {
         intent = this.ai.think(bot, this.actors.filter((actor) => actor !== bot && actor.alive), this.grid, this.bombs, this.danger, this.powers);
         bot.thinkMs = 120 + Math.random() * 120;
       }
-      this.moveActor(bot, intent.dir, dt);
+      // Resolve the tactical decision first: Dragon/Frost must arm the bomb
+      // being placed this tick, then immediately start the planned escape.
+      if (intent.useSpecial) this.useSpecial(bot);
       if (intent.placeBomb) this.placeBomb(bot);
-      if (bot.specialCooldownMs <= 0 && Math.random() < 0.006 && (distance(bot.grid, this.player.grid) < 6 || this.danger.isDanger(bot.grid))) {
-        this.useSpecial(bot);
-      }
+      this.moveActor(bot, intent.dir, dt);
     }
   }
 
@@ -1108,6 +1109,18 @@ export class GameScene extends Phaser.Scene {
     this.bombViews.cleanup();
     AudioSystem.get().sfx(won ? 'victory' : 'loss');
     const reward = awardMatch(this.player, won, this.mode.elapsedMs);
+    MatchTelemetrySystem.record({
+      map: SESSION.map,
+      mode: SESSION.mode,
+      champion: this.player.character,
+      won,
+      reason,
+      elapsedMs: this.mode.elapsedMs,
+      kills: this.player.kills,
+      shards: this.player.shards,
+      healthRemaining: this.player.stats.health,
+      lastRune: this.player.lastPowerUp
+    });
     this.time.delayedCall(700, () => {
       this.scene.start('ResultsScene', {
         won,

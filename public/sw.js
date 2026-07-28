@@ -18,6 +18,21 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
+  // HTML must be network-first. Vite fingerprints JavaScript assets on every
+  // release, so serving a cached index page can otherwise reference a bundle
+  // that GitHub Pages has already replaced and leave mobile Safari blank.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(scoped('./')).then((cached) => cached || caches.match(scoped('index.html'))))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       if (!response || response.status !== 200 || response.type === 'opaque') return response;
