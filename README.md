@@ -25,7 +25,7 @@ For testing on a phone connected to the same Wi-Fi network, run `npm run dev:mob
 - Menus use mouse clicks.
 - `M`: toggle audio during a match
 - Player 2: arrows to move, `Enter` bomb, right `Shift` special, `P` remote
-- Phone: on-screen direction pad, Bomb, Power, Hex, and Pause controls
+- Phone/iPad: draggable virtual joystick plus Bomb, Power, Hex, and Pause controls
 - Bluetooth remote/gamepad: use **Controller Setup** on the title screen to view incoming iPad browser events and bind every action
 
 ## Play on iPad
@@ -49,32 +49,45 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 ## Current Features
 
 - 1280x720 responsive widescreen presentation with full-bleed kingdom art
+- Device-aware phone and tablet formatting with a compact match HUD and enlarged 4:3 iPad arena view
 - Playable single-player arena combat against AI bots and optional local two-player
 - Smooth grid-aware movement
 - Rune bombs with fuse pulse, chain reactions, cross-shaped blasts, and destructible blocks
 - Power-up drops: Ember Rune, Twin Sigil, Wolf Sprint, Stoneguard Blessing, Dragonflame Core, Ghost Veil, Frost Snare, Raven Blink, Beast Call, Remote Hex, and Champion Surge
 - Eight selectable champions with large showcase portraits, stable layered animation, and themed special abilities
-- Classic Trial and Crown Shard Hunt modes
+- Classic Trial, Crown Shard Hunt, and pressure-free Rune Sandbox modes
 - Four original maps: Ashen Courtyard, Moonfang Ruins, Frost Crown Keep, Hollowmoon Sanctuary
 - Layered themed environments with eight floor variations, solid walls, destructible blocks, spawn pads, animated shrines, landscape art, ambient props, and border masonry
 - Central shrine objective support with periodic shard or rare rune spawns
-- Side-rail HUD, active-effect tracking, pause overlay, polished results screen, and rewards saved to localStorage
+- Desktop side-rail HUD, compact touch HUD, active-effect tracking, pause overlay, polished results screen, and rewards saved to localStorage
 - Rune Guide screen explaining power-up effects
+- Rune Lab for granting every real pickup, testing charges and timers, and sparring with a durable practice rival
 - Original procedural menu, results, and kingdom-specific battle scores with persistent mute and mix settings
 - Installable PWA manifest, landscape mobile metadata, offline runtime cache, and multi-touch controls
 
 ## Known Limitations
 
-- Bot AI is intentionally lightweight for the first playable build.
+- Bot AI uses a danger map, escape-path checks, rival targeting, block breaking, power-up seeking, centre pressure, and situational specials. It has one shared difficulty and no team tactics yet.
 - Champion animation uses stable portrait-layer motion, glows, particles, squash/stretch, and facing flips; authored directional frame sheets remain a future art pass.
 - The score is generated with WebAudio rather than recorded orchestral stems.
-- Online multiplayer is not implemented.
+- Online multiplayer is not implemented. Local two-player is available on one keyboard.
 - Environment art is now PNG-based and textured, but the next jump toward the reference art quality would be hand-painted or AI-assisted tile atlases sliced into larger prop sets.
 
 ## Suggested Next Upgrades
 
 - Add bespoke sprite sheets and impact animation frames.
 - Expand Survival, Beast Royale, and Rune Dominion modes.
-- Add local two-player controls.
-- Add difficulty settings and smarter escape route planning.
+- Add AI difficulty profiles, short-term tile reservations, and deeper opponent prediction.
 - Add cosmetic unlock screen and more map hazards.
+
+## Multiplayer Roadmap
+
+Local two-player already uses the same deterministic grid rules as solo play. A production online mode should keep GitHub Pages as the client and add a separately hosted authoritative Node.js room server.
+
+1. Move match commands and snapshots behind a transport-neutral controller interface.
+2. Add lobby creation, room codes, ready states, reconnect tokens, and host migration policy.
+3. Run movement, bomb placement, blast propagation, damage, pickups, and win conditions on the server at a fixed tick.
+4. Send compact input commands from clients; interpolate remote champions and reconcile the local champion against server snapshots.
+5. Add latency simulation, disconnect recovery, duplicate-input protection, and server-side validation before public matchmaking.
+
+Colyseus or Socket.IO would both fit this architecture. Colyseus provides more room/state synchronization out of the box; Socket.IO offers a smaller transport layer with more custom game-state work.

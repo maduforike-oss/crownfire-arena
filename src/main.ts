@@ -12,8 +12,10 @@ import { ResultsScene } from './game/scenes/ResultsScene';
 import { PowerUpGuideScene } from './game/scenes/PowerUpGuideScene';
 import { ControllerSetupScene } from './game/scenes/ControllerSetupScene';
 import { registerServiceWorker } from './game/systems/PWAInstall';
+import { installDevicePresentation } from './game/systems/DeviceProfile';
 
 registerServiceWorker();
+installDevicePresentation();
 
 new Phaser.Game({
   type: Phaser.AUTO,

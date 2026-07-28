@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import type { Direction } from '../utils/types';
+import type { DeviceProfile } from '../systems/DeviceProfile';
 
 type TouchAction = 'bomb' | 'special' | 'remote' | 'pause';
 
-const STICK_CENTER = { x: 132, y: 590 };
 const STICK_TRAVEL = 54;
 const STICK_DEAD_ZONE = 13;
 
@@ -17,17 +17,23 @@ export class TouchController {
   private stickGlow?: Phaser.GameObjects.Arc;
   private remoteButton?: Phaser.GameObjects.Container;
   private remoteLabel?: Phaser.GameObjects.Text;
+  private readonly stickCenter: { x: number; y: number };
 
-  constructor(private readonly scene: Phaser.Scene) {
-    this.visible = scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
+  constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
+    this.visible = profile.touch || scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
+    this.stickCenter = profile.compactHud ? { x: 220, y: 590 } : { x: 132, y: 590 };
     this.root = scene.add.container(0, 0).setDepth(180).setScrollFactor(0).setVisible(this.visible);
     if (!this.visible) return;
 
     this.createJoystick();
-    this.createActionButton(1162, 555, 66, 0xf06a31, 'BOMB', 'bomb');
-    this.createActionButton(1080, 628, 54, 0xa974ff, 'POWER', 'special');
-    this.remoteButton = this.createActionButton(1210, 652, 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
-    this.createActionButton(1238, 42, 34, 0xd8a84e, 'II', 'pause');
+    const bombX = profile.compactHud ? 1060 : 1162;
+    const powerX = profile.compactHud ? 950 : 1080;
+    const remoteX = profile.compactHud ? 1080 : 1210;
+    const pauseX = profile.compactHud ? 1100 : 1238;
+    this.createActionButton(bombX, 555, 66, 0xf06a31, 'BOMB', 'bomb');
+    this.createActionButton(powerX, 628, 54, 0xa974ff, 'POWER', 'special');
+    this.remoteButton = this.createActionButton(remoteX, 652, 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
+    this.createActionButton(pauseX, 42, 34, 0xd8a84e, 'II', 'pause');
 
     this.scene.input.on('pointermove', this.moveJoystick, this);
     this.scene.input.on('pointerup', this.releasePointer, this);
@@ -63,50 +69,51 @@ export class TouchController {
   }
 
   private createJoystick(): void {
+    const center = this.stickCenter;
     const outerGlow = this.scene.add.circle(
-      STICK_CENTER.x,
-      STICK_CENTER.y,
+      center.x,
+      center.y,
       80,
       0x5e91c9,
       0.08
     ).setStrokeStyle(2, 0x9ec8ff, 0.42);
     const base = this.scene.add.circle(
-      STICK_CENTER.x,
-      STICK_CENTER.y,
+      center.x,
+      center.y,
       68,
       0x090b12,
       0.78
     ).setStrokeStyle(3, 0xd8a84e, 0.56);
     const compass = this.scene.add.circle(
-      STICK_CENTER.x,
-      STICK_CENTER.y,
+      center.x,
+      center.y,
       47,
       0x111722,
       0.72
     ).setStrokeStyle(1, 0x9ec8ff, 0.35);
-    const horizontal = this.scene.add.rectangle(STICK_CENTER.x, STICK_CENTER.y, 88, 2, 0x9ec8ff, 0.18);
-    const vertical = this.scene.add.rectangle(STICK_CENTER.x, STICK_CENTER.y, 2, 88, 0x9ec8ff, 0.18);
+    const horizontal = this.scene.add.rectangle(center.x, center.y, 88, 2, 0x9ec8ff, 0.18);
+    const vertical = this.scene.add.rectangle(center.x, center.y, 2, 88, 0x9ec8ff, 0.18);
     this.stickGlow = this.scene.add.circle(
-      STICK_CENTER.x,
-      STICK_CENTER.y,
+      center.x,
+      center.y,
       42,
       0x5e91c9,
       0.08
     ).setStrokeStyle(2, 0x9ec8ff, 0.38);
     this.stickKnob = this.scene.add.circle(
-      STICK_CENTER.x,
-      STICK_CENTER.y,
+      center.x,
+      center.y,
       31,
       0x202a39,
       0.98
     ).setStrokeStyle(3, 0xffdf91, 0.9);
-    const crown = this.scene.add.text(STICK_CENTER.x, STICK_CENTER.y, '+', {
+    const crown = this.scene.add.text(center.x, center.y, '+', {
       fontFamily: 'Arial',
       fontStyle: 'bold',
       fontSize: '24px',
       color: '#f7d783'
     }).setOrigin(0.5);
-    const zone = this.scene.add.zone(STICK_CENTER.x, STICK_CENTER.y, 190, 190).setInteractive();
+    const zone = this.scene.add.zone(center.x, center.y, 190, 190).setInteractive();
     zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.stickPointerId !== undefined) return;
       this.stickPointerId = pointer.id;
@@ -122,12 +129,12 @@ export class TouchController {
   }
 
   private updateJoystick(pointer: Phaser.Input.Pointer): void {
-    const dx = pointer.x - STICK_CENTER.x;
-    const dy = pointer.y - STICK_CENTER.y;
+    const dx = pointer.x - this.stickCenter.x;
+    const dy = pointer.y - this.stickCenter.y;
     const distance = Math.hypot(dx, dy);
     const scale = distance > STICK_TRAVEL ? STICK_TRAVEL / distance : 1;
-    const knobX = STICK_CENTER.x + dx * scale;
-    const knobY = STICK_CENTER.y + dy * scale;
+    const knobX = this.stickCenter.x + dx * scale;
+    const knobY = this.stickCenter.y + dy * scale;
     this.stickKnob?.setPosition(knobX, knobY);
 
     if (distance < STICK_DEAD_ZONE) {
@@ -176,7 +183,7 @@ export class TouchController {
   private resetJoystick(): void {
     this.stickPointerId = undefined;
     this.currentDirection = 'none';
-    this.stickKnob?.setPosition(STICK_CENTER.x, STICK_CENTER.y);
+    this.stickKnob?.setPosition(this.stickCenter.x, this.stickCenter.y);
     this.stickGlow?.setAlpha(1).setScale(1);
   }
 

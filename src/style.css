@@ -9,6 +9,7 @@
   --frost: #75d7ff;
   --veil: #a974ff;
   --danger: #ff3f46;
+  --crownfire-match-zoom: 1;
 }
 
 html,
@@ -59,8 +60,28 @@ canvas {
   position: relative;
   z-index: 1;
   display: block;
+  margin: 0 !important;
   max-width: 100%;
   max-height: 100%;
   image-rendering: auto;
   box-shadow: 0 0 64px rgba(0, 0, 0, 0.78);
+  transform: scale(var(--crownfire-match-zoom));
+  transform-origin: center;
+  transition: transform 180ms ease-out;
+}
+
+body.device-touch #game {
+  padding:
+    max(env(safe-area-inset-top, 0px), 2px)
+    max(env(safe-area-inset-right, 0px), 2px)
+    max(env(safe-area-inset-bottom, 0px), 2px)
+    max(env(safe-area-inset-left, 0px), 2px);
+}
+
+body.touch-match #game {
+  overflow: hidden;
+}
+
+body.device-phone canvas {
+  box-shadow: none;
 }

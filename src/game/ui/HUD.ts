@@ -19,10 +19,16 @@ export class HUD {
   private powerText!: Phaser.GameObjects.Text;
   private activePanel!: Phaser.GameObjects.Container;
   private lastPulseKey = '';
+  private compact = false;
 
   constructor(private readonly scene: Phaser.Scene) {}
 
-  create(mode: ModeDef): void {
+  create(mode: ModeDef, compact = false): void {
+    this.compact = compact;
+    if (compact) {
+      this.createCompact(mode);
+      return;
+    }
     const top = this.scene.add.rectangle(640, 34, 720, 58, 0x0b0c12, 0.96).setStrokeStyle(2, 0xd8a84e, 0.64).setDepth(100);
     this.scene.add.text(640, 13, 'CURRENT OBJECTIVE', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: '#d8a84e' }).setOrigin(0.5).setDepth(101);
     this.objective = this.scene.add.text(640, 36, mode.objective, {
@@ -65,36 +71,89 @@ export class HUD {
     }).setOrigin(0.5);
   }
 
+  private createCompact(mode: ModeDef): void {
+    this.scene.add.rectangle(640, 32, 980, 58, 0x090a10, 0.94)
+      .setStrokeStyle(2, 0xd8a84e, 0.52)
+      .setDepth(100);
+    this.health = this.scene.add.text(220, 21, '', {
+      fontFamily: 'Georgia', fontSize: '20px', color: '#f7d783'
+    }).setOrigin(0.5).setDepth(101);
+    this.stats = this.scene.add.text(350, 20, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#f4ead2', align: 'center'
+    }).setOrigin(0.5).setDepth(101);
+    this.shards = this.scene.add.text(465, 20, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#9ec8ff'
+    }).setOrigin(0.5).setDepth(101);
+    const compactObjective = mode.id === 'sandbox'
+      ? 'Test every rune in the lab'
+      : mode.id === 'classic'
+        ? 'Eliminate all rivals'
+        : mode.id === 'shards'
+          ? 'Collect 10 Crown Shards'
+          : mode.objective;
+    this.objective = this.scene.add.text(640, 22, compactObjective, {
+      fontFamily: 'Georgia', fontSize: '13px', color: '#f4ead2', align: 'center', wordWrap: { width: 285 }
+    }).setOrigin(0.5).setDepth(101);
+    this.special = this.scene.add.text(825, 17, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#eadcff', align: 'center'
+    }).setOrigin(0.5).setDepth(101);
+    this.specialBar = this.scene.add.rectangle(770, 45, 110, 4, 0xa974ff, 0.95)
+      .setOrigin(0, 0.5)
+      .setDepth(101);
+    this.specialHint = this.scene.add.text(825, 53, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '8px', color: '#a99eb4', align: 'center'
+    }).setOrigin(0.5).setDepth(101);
+    this.bots = this.scene.add.text(945, 18, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#bad7ff'
+    }).setOrigin(0.5).setDepth(101);
+    this.timer = this.scene.add.text(1025, 40, '', {
+      fontFamily: 'Georgia', fontSize: '20px', color: '#f4ead2'
+    }).setOrigin(0.5).setDepth(101);
+    this.powerIcon = this.scene.add.image(495, 46, 'power-fallback')
+      .setDisplaySize(28, 28)
+      .setAlpha(0.45)
+      .setDepth(101);
+    this.powerText = this.scene.add.text(516, 46, 'NO RUNE', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: '#958a78'
+    }).setOrigin(0, 0.5).setDepth(101);
+    this.activePanel = this.scene.add.container(640, 82).setDepth(104);
+  }
+
   update(player: Player, livingBots: number, elapsedMs: number): void {
     const character = getCharacter(player.character);
     this.health.setText(`${'♥'.repeat(Math.max(0, player.stats.health))}${'♡'.repeat(Math.max(0, player.stats.maxHealth - player.stats.health))}`);
-    this.stats.setText(`BOMBS  ${player.stats.activeBombs}/${player.stats.maxBombs}\nBLAST RADIUS  ${player.stats.blastRadius}`);
-    this.shards.setText(`CROWN SHARDS  ${player.shards}`);
-    this.bots.setText(`${livingBots} RIVALS REMAIN`);
+    this.stats.setText(this.compact
+      ? `BOMB ${player.stats.activeBombs}/${player.stats.maxBombs}  R${player.stats.blastRadius}`
+      : `BOMBS  ${player.stats.activeBombs}/${player.stats.maxBombs}\nBLAST RADIUS  ${player.stats.blastRadius}`);
+    this.shards.setText(this.compact ? `SHARDS ${player.shards}` : `CROWN SHARDS  ${player.shards}`);
+    this.bots.setText(this.compact ? `${livingBots} RIVALS` : `${livingBots} RIVALS REMAIN`);
     const seconds = Math.floor(elapsedMs / 1000);
     this.timer.setText(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
     const cooldown = Math.max(0, player.specialCooldownMs);
-    this.special.setText(cooldown > 0 ? `${character.specialName}\n${Math.ceil(cooldown / 1000)}s` : `${character.specialName}\nREADY`);
+    this.special.setText(cooldown > 0
+      ? `${character.specialName}${this.compact ? ' ' : '\n'}${Math.ceil(cooldown / 1000)}s`
+      : `${character.specialName}${this.compact ? ' ' : '\n'}READY`);
     const cooldownMax = player.character === 'wolf' ? 7000 : player.character === 'raven' ? 8000 : player.character === 'dragon' || player.character === 'frost' ? 10000 : 12000;
-    this.specialBar.displayWidth = 164 * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
+    const specialWidth = this.compact ? 110 : 164;
+    this.specialBar.displayWidth = specialWidth * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
     this.specialBar.setFillStyle(cooldown > 0 ? 0x6d4b88 : character.accentColor);
     this.specialHint.setText(
       player.character === 'dragon'
-        ? 'FACING LINE  •  RANGE 6'
+        ? this.compact ? 'LINE R6' : 'FACING LINE  •  RANGE 6'
         : player.character === 'frost'
-          ? 'MOVE TO LAY ICE  •  5s'
+          ? this.compact ? 'ICE TRAIL 5s' : 'MOVE TO LAY ICE  •  5s'
           : player.character === 'stone'
-            ? 'ABSORBS NEXT HIT  •  10s'
+            ? this.compact ? 'SHIELD 10s' : 'ABSORBS NEXT HIT  •  10s'
             : ''
     );
 
     if (player.lastPowerUp) {
       const power = getPowerUp(player.lastPowerUp);
       this.powerIcon.setTexture(this.scene.textures.exists(power.assetKey) ? power.assetKey : 'power-fallback').setAlpha(1);
-      this.powerText.setText(power.name).setColor('#f4ead2');
+      this.powerText.setText(this.compact ? power.name.toUpperCase() : power.name).setColor('#f4ead2');
     } else {
       this.powerIcon.setTexture('power-fallback').setAlpha(0.45);
-      this.powerText.setText('No rune held').setColor('#958a78');
+      this.powerText.setText(this.compact ? 'NO RUNE' : 'No rune held').setColor('#958a78');
     }
     this.objective.setColor(player.stats.temporaryGhostMode > 0 ? '#cdd8ff' : '#f4ead2');
     this.renderActiveEffects(player);
@@ -133,11 +192,32 @@ export class HUD {
     if (player.stats.nextBombFrostSnare) effects.push({ icon: 'power-frostSnare', label: 'Frost Next', color: 0x75d7ff });
 
     if (!effects.length) {
-      this.activePanel.add(this.scene.add.text(0, 18, 'No active enchantments', { fontFamily: 'Arial', fontSize: '13px', color: '#716b65' }).setOrigin(0.5));
+      if (!this.compact) {
+        this.activePanel.add(this.scene.add.text(0, 18, 'No active enchantments', { fontFamily: 'Arial', fontSize: '13px', color: '#716b65' }).setOrigin(0.5));
+      }
       return;
     }
 
     effects.slice(0, 5).forEach((effect, index) => {
+      if (this.compact) {
+        const count = Math.min(5, effects.length);
+        const x = (index - (count - 1) / 2) * 132;
+        const panel = this.scene.add.rectangle(x, 0, 124, 34, 0x10121a, 0.95).setStrokeStyle(1, effect.color, 0.58);
+        const icon = this.scene.add.image(x - 43, 0, this.scene.textures.exists(effect.icon) ? effect.icon : 'power-fallback').setDisplaySize(28, 28);
+        const suffix = effect.remainingMs !== undefined
+          ? `${Math.ceil(effect.remainingMs / 1000)}s`
+          : effect.charges !== undefined
+            ? `x${effect.charges}`
+            : 'NEXT';
+        const text = this.scene.add.text(x - 24, -6, effect.label, {
+          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: `#${effect.color.toString(16).padStart(6, '0')}`
+        });
+        const detail = this.scene.add.text(x - 24, 7, suffix, {
+          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: '#f4ead2'
+        });
+        this.activePanel.add([panel, icon, text, detail]);
+        return;
+      }
       const y = index * 66 + 34;
       const panel = this.scene.add.rectangle(0, y, 194, 56, 0x17151d, 0.94).setStrokeStyle(1, effect.color, 0.5);
       const icon = this.scene.add.image(-66, y, this.scene.textures.exists(effect.icon) ? effect.icon : 'power-fallback').setDisplaySize(42, 42);

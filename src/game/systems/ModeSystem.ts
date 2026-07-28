@@ -10,6 +10,7 @@ export class ModeSystem {
   update(dt: number, player: Player, actors: Player[]): { done: boolean; won: boolean; reason: string } | undefined {
     if (this.ended) return undefined;
     this.elapsedMs += dt;
+    if (this.mode === 'sandbox') return undefined;
     const livingBots = actors.filter((a) => !a.isHuman && a.alive);
     const livingHumans = actors.filter((a) => a.isHuman && a.alive);
     if (livingHumans.length === 0) return this.finish(false, 'Your champions fell in the rune war.');

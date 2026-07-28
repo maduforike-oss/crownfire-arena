@@ -25,6 +25,8 @@ import { MapRenderer } from '../systems/MapRenderer';
 import { AudioSystem } from '../systems/AudioSystem';
 import { BombViewSystem } from '../systems/BombViewSystem';
 import { TouchController } from '../controllers/TouchController';
+import { POWER_UPS } from '../config/PowerUps';
+import { setMatchPresentation, type DeviceProfile } from '../systems/DeviceProfile';
 
 export class GameScene extends Phaser.Scene {
   private grid!: GridSystem;
@@ -61,6 +63,10 @@ export class GameScene extends Phaser.Scene {
   private pausedText?: Phaser.GameObjects.Container;
   private paused = false;
   private ended = false;
+  private device!: DeviceProfile;
+  private sandboxOpen = false;
+  private sandboxPanel?: Phaser.GameObjects.Container;
+  private sandboxLauncher?: Phaser.GameObjects.Container;
 
   constructor() {
     super('GameScene');
@@ -68,6 +74,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resetMatchState();
+    this.device = setMatchPresentation(true);
     AudioSystem.get().startMusic('battle', SESSION.map);
     this.input.keyboard?.once('keydown-M', () => this.toggleMute());
     this.input.once('pointerdown', () => AudioSystem.get().startMusic('battle', SESSION.map));
@@ -80,7 +87,7 @@ export class GameScene extends Phaser.Scene {
     this.danger = new DangerMapSystem();
     this.mode = new ModeSystem(SESSION.mode);
     this.human = new HumanController(this, 'wasd');
-    this.touch = new TouchController(this);
+    this.touch = new TouchController(this, this.device);
     this.human2 = SESSION.localPlayers === 2 ? new HumanController(this, 'arrows') : undefined;
     this.tileLayer = this.add.container();
     this.objectLayer = this.add.container();
@@ -94,10 +101,14 @@ export class GameScene extends Phaser.Scene {
     this.explosionFx = new ExplosionSystem(this, this.grid, this.effectLayer);
     this.bombViews = new BombViewSystem(this, this.grid, this.objectLayer, this.explosionFx);
     this.drawArena();
-    this.powers.seedInitial(SESSION.mode === 'classic' ? 5 : 7);
+    this.powers.seedInitial(SESSION.mode === 'sandbox' ? 0 : SESSION.mode === 'classic' ? 5 : 7);
     this.spawnActors();
     this.hud = new HUD(this);
-    this.hud.create(modeDef);
+    this.hud.create(modeDef, this.device.compactHud);
+    if (SESSION.mode === 'sandbox') {
+      this.createSandboxLauncher();
+      this.input.keyboard?.on('keydown-T', this.toggleSandboxLab, this);
+    }
     this.showRoundIntro();
     AudioSystem.get().sfx('matchStart');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
@@ -107,6 +118,7 @@ export class GameScene extends Phaser.Scene {
     if (this.ended) return;
     if (this.human.consumePause() || this.touch?.consumePause()) this.togglePause();
     if (this.paused) return;
+    if (this.sandboxOpen) return;
     const dt = Math.min(delta, 34);
     this.spawnGraceMs = Math.max(0, this.spawnGraceMs - dt);
     this.tickStatuses(dt);
@@ -141,6 +153,26 @@ export class GameScene extends Phaser.Scene {
     const spawn = this.grid.map.spawns[0];
     this.player = new Player('player', mainChar.name, mainChar.id, { ...spawn }, this.grid.toWorld(spawn), makeStats(mainChar.id), true, mainChar.palette, mainChar.accent);
     this.actors = [this.player];
+    if (SESSION.mode === 'sandbox') {
+      const targetDef = CHARACTERS.find((character) => character.id === 'stone') ?? CHARACTERS[0];
+      const targetSpawn = this.grid.map.spawns[2];
+      const target = new Bot(
+        'sandbox-target',
+        'Practice Rival',
+        targetDef.id,
+        { ...targetSpawn },
+        this.grid.toWorld(targetSpawn),
+        makeStats(targetDef.id),
+        false,
+        targetDef.palette,
+        targetDef.accent
+      );
+      target.stats.health = 20;
+      target.stats.maxHealth = 20;
+      this.actors.push(target);
+      for (const actor of this.actors) this.makeActorView(actor);
+      return;
+    }
     let botStartIndex = 1;
     if (SESSION.localPlayers === 2) {
       const ch = CHARACTERS.find((c) => c.id === 'wolf')!;
@@ -210,6 +242,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateBots(dt: number): void {
+    if (SESSION.mode === 'sandbox') return;
     for (const bot of this.actors.filter((a): a is Bot => a instanceof Bot && a.alive)) {
       if (this.spawnGraceMs > 0) continue;
       bot.thinkMs -= dt;
@@ -321,6 +354,12 @@ export class GameScene extends Phaser.Scene {
       this.floatText(actor.world.x, actor.world.y - 42, 'Shield', '#f7d783');
       this.animation.shieldBreak(actor);
       AudioSystem.get().sfx('shieldBreak');
+      return;
+    }
+    if (SESSION.mode === 'sandbox' && actor.isHuman) {
+      actor.invulnerableMs = 500;
+      this.floatText(actor.world.x, actor.world.y - 42, 'Sandbox ward', '#9ec8ff');
+      this.specialPulse(actor, 0x9ec8ff);
       return;
     }
     actor.stats.health -= 1;
@@ -925,6 +964,102 @@ export class GameScene extends Phaser.Scene {
     return 'down';
   }
 
+  private createSandboxLauncher(): void {
+    const x = this.device.compactHud ? 1060 : 1150;
+    const y = this.device.compactHud ? 112 : 525;
+    const glow = this.add.rectangle(x, y, 142, 40, 0x9e70ff, 0.12).setStrokeStyle(2, 0xd9b8ff, 0.8);
+    const label = this.add.text(x, y, this.device.compactHud ? 'RUNE LAB' : 'RUNE LAB  [T]', {
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fontSize: '12px',
+      color: '#f4ead2'
+    }).setOrigin(0.5);
+    const zone = this.add.zone(x, y, 156, 52).setInteractive({ useHandCursor: true });
+    zone.on('pointerdown', () => this.toggleSandboxLab());
+    this.sandboxLauncher = this.add.container(0, 0, [glow, label, zone]).setDepth(175);
+  }
+
+  private toggleSandboxLab(): void {
+    if (SESSION.mode !== 'sandbox') return;
+    if (this.sandboxPanel) {
+      this.sandboxPanel.destroy(true);
+      this.sandboxPanel = undefined;
+      this.sandboxOpen = false;
+      this.sandboxLauncher?.setVisible(true);
+      return;
+    }
+
+    this.sandboxOpen = true;
+    this.sandboxLauncher?.setVisible(false);
+    const backdrop = this.add.rectangle(640, 360, 1280, 720, 0x05060a, 0.84).setInteractive();
+    const panel = this.add.rectangle(640, 360, 920, 580, 0x10121a, 0.98).setStrokeStyle(3, 0xa974ff, 0.78);
+    const title = this.add.text(640, 92, 'Rune Lab', {
+      fontFamily: 'Georgia',
+      fontSize: '36px',
+      color: '#f7d783',
+      stroke: '#08080c',
+      strokeThickness: 4
+    }).setOrigin(0.5);
+    const instruction = this.add.text(640, 128, 'Tap a rune to apply its real match effect. Restart clears the arena and every stack.', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#cbb99a'
+    }).setOrigin(0.5);
+    const children: Phaser.GameObjects.GameObject[] = [backdrop, panel, title, instruction];
+
+    POWER_UPS.forEach((power, index) => {
+      const column = index % 4;
+      const row = Math.floor(index / 4);
+      const x = 340 + column * 200;
+      const y = 206 + row * 118;
+      const card = this.add.rectangle(x, y, 184, 102, 0x171923, 0.98).setStrokeStyle(2, power.color, 0.56);
+      const icon = this.add.image(x - 61, y, this.textures.exists(power.assetKey) ? power.assetKey : 'power-fallback').setDisplaySize(54, 54);
+      const name = this.add.text(x - 25, y - 32, power.name, {
+        fontFamily: 'Georgia',
+        fontSize: '14px',
+        color: '#f4ead2',
+        wordWrap: { width: 108 }
+      });
+      const effect = this.add.text(x - 25, y + 2, power.description, {
+        fontFamily: 'Arial',
+        fontSize: '10px',
+        color: '#b5a995',
+        wordWrap: { width: 110 }
+      });
+      const cardZone = this.add.zone(x, y, 184, 102).setInteractive({ useHandCursor: true });
+      cardZone.on('pointerover', () => card.setFillStyle(0x262838, 1));
+      cardZone.on('pointerout', () => card.setFillStyle(0x171923, 0.98));
+      cardZone.on('pointerdown', () => this.grantSandboxPower(power.id));
+      children.push(card, icon, name, effect, cardZone);
+    });
+
+    const resetBg = this.add.rectangle(500, 635, 240, 48, 0x171923, 1).setStrokeStyle(2, 0xf06a31, 0.76);
+    const resetText = this.add.text(500, 635, 'RESET SANDBOX', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '14px', color: '#f4ead2'
+    }).setOrigin(0.5);
+    const resetZone = this.add.zone(500, 635, 250, 58).setInteractive({ useHandCursor: true });
+    resetZone.on('pointerdown', () => this.scene.restart());
+    const closeBg = this.add.rectangle(780, 635, 240, 48, 0x171923, 1).setStrokeStyle(2, 0xd8a84e, 0.76);
+    const closeText = this.add.text(780, 635, 'RETURN TO ARENA', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '14px', color: '#f4ead2'
+    }).setOrigin(0.5);
+    const closeZone = this.add.zone(780, 635, 250, 58).setInteractive({ useHandCursor: true });
+    closeZone.on('pointerdown', () => this.toggleSandboxLab());
+    children.push(resetBg, resetText, resetZone, closeBg, closeText, closeZone);
+    this.sandboxPanel = this.add.container(0, 0, children).setDepth(220);
+  }
+
+  private grantSandboxPower(type: PowerUpType): void {
+    const power = getPowerUp(type);
+    const label = power.apply(this.player.stats);
+    this.player.lastPowerUp = type;
+    this.player.lastPowerUpMs = 4200;
+    this.applyPowerUpFeedback(this.player, type, label);
+    this.pulseHudForPower(type);
+    this.redrawHealth(this.player);
+    this.toggleSandboxLab();
+  }
+
   private showRoundIntro(): void {
     const modeDef = MODES.find((m) => m.id === SESSION.mode) ?? MODES[0];
     const bg = this.add.rectangle(640, 285, 700, 142, 0x0d0c12, 0.95).setStrokeStyle(2, this.grid.map.glow, 0.8);
@@ -939,7 +1074,10 @@ export class GameScene extends Phaser.Scene {
       fontSize: '16px',
       color: '#f4ead2'
     }).setOrigin(0.5);
-    const hint = this.add.text(640, 326, 'Break blocks • collect runes • control the centre\nWASD move   SPACE bomb   SHIFT special   E remote', {
+    const hintText = SESSION.mode === 'sandbox'
+      ? 'Open RUNE LAB to apply any power | practice rival has 20 health\nT opens lab   WASD move   SPACE bomb   SHIFT special'
+      : 'Break blocks | collect runes | control the centre\nWASD move   SPACE bomb   SHIFT special   E remote';
+    const hint = this.add.text(640, 326, hintText, {
       fontFamily: 'Arial',
       fontSize: '14px', align: 'center', lineSpacing: 7,
       color: '#cbb99a'
@@ -1009,9 +1147,13 @@ export class GameScene extends Phaser.Scene {
     this.frostZones.clear();
     this.frostZoneOwners.clear();
     this.frostSprites.clear();
+    this.sandboxOpen = false;
+    this.sandboxPanel = undefined;
+    this.sandboxLauncher = undefined;
   }
 
   private shutdown(): void {
+    setMatchPresentation(false);
     this.bombViews?.cleanup();
     this.tweens.killAll();
     this.input.keyboard?.removeAllListeners();
