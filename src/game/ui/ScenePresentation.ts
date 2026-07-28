@@ -16,9 +16,11 @@ export function addSceneBackdrop(scene: Phaser.Scene, options: BackdropOptions):
   const { theme, imageAlpha = 0.7, veilAlpha = 0.32 } = options;
   const root = scene.add.container(0, 0).setDepth(-20);
   root.add(scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height / 2, PRESENTATION.width, PRESENTATION.height, 0x07080d));
-  const heroKey = theme === 'ashen' ? 'menu-crownfire-hero' : `map-${theme}-premium-floor`;
-  const hero = scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, heroKey)
-    .setDisplaySize(theme === 'ashen' ? PRESENTATION.width : PRESENTATION.width, theme === 'ashen' ? PRESENTATION.height : 1110)
+  const hero = theme === 'ashen'
+    ? scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, 'menu-crownfire-hero')
+    : scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, 'reference-arena-atlas', `reference-${theme}-board`);
+  hero
+    .setDisplaySize(PRESENTATION.width, theme === 'ashen' ? PRESENTATION.height : 960)
     .setAlpha(Math.min(0.82, imageAlpha));
   root.add(hero);
   root.add(scene.add.rectangle(

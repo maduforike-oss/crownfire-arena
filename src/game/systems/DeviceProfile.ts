@@ -24,7 +24,7 @@ export function getDeviceProfile(): DeviceProfile {
   const matchZoom = !touch
     ? 1
     : aspectRatio < 1.55
-      ? 1.28
+      ? 1.15
       : 1;
 
   return {

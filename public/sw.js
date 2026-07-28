@@ -1,4 +1,4 @@
-const CACHE_NAME = 'crownfire-arena-v4';
+const CACHE_NAME = 'crownfire-arena-v5';
 const scopeUrl = new URL(self.registration.scope);
 const scoped = (path) => new URL(path, scopeUrl).toString();
 const APP_SHELL = [scoped('./'), scoped('index.html'), scoped('manifest.webmanifest')];

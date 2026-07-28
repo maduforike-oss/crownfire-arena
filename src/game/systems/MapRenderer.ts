@@ -65,11 +65,23 @@ export class MapRenderer {
   private renderBackplate(map: MapDef, bounds: Phaser.Geom.Rectangle): void {
     const theme = getMapTheme(map.id);
     this.scene.add.rectangle(GAME_CONFIG.width / 2, GAME_CONFIG.height / 2, GAME_CONFIG.width, GAME_CONFIG.height, 0x050508).setDepth(-5);
-    this.scene.add.image(GAME_CONFIG.width / 2, GAME_CONFIG.height / 2, 'reference-arena-atlas').setDisplaySize(1280, 853).setAlpha(0.36).setDepth(-4);
-    this.scene.add.image(130, 360, `landscape-${map.id}`).setDisplaySize(260, 720).setAlpha(0.28).setDepth(-3);
-    this.scene.add.image(GAME_CONFIG.width - 130, 360, `landscape-${map.id}`).setDisplaySize(260, 720).setAlpha(0.28).setDepth(-3).setFlipX(true);
-    this.scene.add.rectangle(130, 360, 260, 720, 0x050508, 0.28).setDepth(-3);
-    this.scene.add.rectangle(GAME_CONFIG.width - 130, 360, 260, 720, 0x050508, 0.28).setDepth(-3);
+    this.scene.add.image(
+      GAME_CONFIG.width / 2,
+      GAME_CONFIG.height / 2,
+      'reference-arena-atlas',
+      `reference-${map.id}-board`
+    ).setDisplaySize(1280, 960).setAlpha(0.22).setDepth(-4);
+    this.scene.add.image(40, 360, 'reference-arena-atlas', `reference-${map.id}-landscape`)
+      .setDisplaySize(475, 720)
+      .setAlpha(0.68)
+      .setDepth(-3);
+    this.scene.add.image(GAME_CONFIG.width - 40, 360, 'reference-arena-atlas', `reference-${map.id}-landscape`)
+      .setDisplaySize(475, 720)
+      .setAlpha(0.68)
+      .setDepth(-3)
+      .setFlipX(true);
+    this.scene.add.rectangle(130, 360, 260, 720, 0x050508, 0.36).setDepth(-3);
+    this.scene.add.rectangle(GAME_CONFIG.width - 130, 360, 260, 720, 0x050508, 0.36).setDepth(-3);
 
     const glow = this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 70, bounds.height + 70, theme.accentColor, 0.08);
     glow.setDepth(-3);

@@ -21,19 +21,19 @@ export class TouchController {
 
   constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
     this.visible = profile.touch || scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
-    this.stickCenter = profile.compactHud ? { x: 220, y: 590 } : { x: 132, y: 590 };
+    this.stickCenter = profile.compactHud ? { x: 170, y: 590 } : { x: 132, y: 590 };
     this.root = scene.add.container(0, 0).setDepth(180).setScrollFactor(0).setVisible(this.visible);
     if (!this.visible) return;
 
     this.createJoystick();
-    const bombX = profile.compactHud ? 1060 : 1162;
-    const powerX = profile.compactHud ? 950 : 1080;
-    const remoteX = profile.compactHud ? 1080 : 1210;
-    const pauseX = profile.compactHud ? 1100 : 1238;
-    this.createActionButton(bombX, 555, 66, 0xf06a31, 'BOMB', 'bomb');
-    this.createActionButton(powerX, 628, 54, 0xa974ff, 'POWER', 'special');
-    this.remoteButton = this.createActionButton(remoteX, 652, 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
-    this.createActionButton(pauseX, 42, 34, 0xd8a84e, 'II', 'pause');
+    const bombX = profile.compactHud ? 1118 : 1162;
+    const powerX = profile.compactHud ? 1118 : 1080;
+    const remoteX = profile.compactHud ? 1118 : 1210;
+    const pauseX = profile.compactHud ? 1132 : 1238;
+    this.createActionButton(bombX, profile.compactHud ? 510 : 555, profile.compactHud ? 62 : 66, 0xf06a31, 'BOMB', 'bomb');
+    this.createActionButton(powerX, profile.compactHud ? 640 : 628, profile.compactHud ? 50 : 54, 0xa974ff, 'POWER', 'special');
+    this.remoteButton = this.createActionButton(remoteX, profile.compactHud ? 382 : 652, profile.compactHud ? 44 : 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
+    this.createActionButton(pauseX, 42, profile.compactHud ? 32 : 34, 0xd8a84e, 'II', 'pause');
 
     this.scene.input.on('pointermove', this.moveJoystick, this);
     this.scene.input.on('pointerup', this.releasePointer, this);

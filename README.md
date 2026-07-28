@@ -50,6 +50,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 
 - 1280x720 responsive widescreen presentation with full-bleed kingdom art
 - Device-aware phone and tablet formatting with a compact match HUD and enlarged 4:3 iPad arena view
+- Touch joystick and action controls stay in illustrated exterior gutters so all four spawn corners remain visible
 - Playable single-player arena combat against AI bots and optional local two-player
 - Smooth grid-aware movement
 - Rune bombs with fuse pulse, chain reactions, cross-shaped blasts, and destructible blocks
@@ -57,6 +58,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Eight selectable champions with large showcase portraits, stable layered animation, and themed special abilities
 - Classic Trial, Crown Shard Hunt, and pressure-free Rune Sandbox modes
 - Four original maps: Ashen Courtyard, Moonfang Ruins, Frost Crown Keep, Hollowmoon Sanctuary
+- Image-led Arena Select cards using the original kingdom vistas and arena concept paintings
 - Layered themed environments with eight floor variations, solid walls, destructible blocks, spawn pads, animated shrines, landscape art, ambient props, and border masonry
 - Central shrine objective support with periodic shard or rare rune spawns
 - Desktop side-rail HUD, compact touch HUD, active-effect tracking, pause overlay, polished results screen, and rewards saved to localStorage

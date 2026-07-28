@@ -45,6 +45,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.makeReferenceArenaFrames();
     this.makeChampionFallback();
     this.makePowerFallback();
     this.makeBomb();
@@ -65,6 +66,35 @@ export class PreloadScene extends Phaser.Scene {
       }
     }
     this.scene.start('MainMenuScene');
+  }
+
+  private makeReferenceArenaFrames(): void {
+    const texture = this.textures.get('reference-arena-atlas');
+    const frames = {
+      ashen: {
+        board: { x: 8, y: 8, width: 472, height: 366 },
+        landscape: { x: 497, y: 17, width: 254, height: 357 }
+      },
+      moonfang: {
+        board: { x: 775, y: 8, width: 491, height: 366 },
+        landscape: { x: 1292, y: 17, width: 237, height: 357 }
+      },
+      frostkeep: {
+        board: { x: 8, y: 393, width: 472, height: 390 },
+        landscape: { x: 496, y: 394, width: 256, height: 388 }
+      },
+      hollowmoon: {
+        board: { x: 775, y: 394, width: 488, height: 390 },
+        landscape: { x: 1273, y: 394, width: 256, height: 388 }
+      }
+    } as const;
+
+    Object.entries(frames).forEach(([mapId, pair]) => {
+      Object.entries(pair).forEach(([kind, frame]) => {
+        const name = `reference-${mapId}-${kind}`;
+        if (!texture.has(name)) texture.add(name, 0, frame.x, frame.y, frame.width, frame.height);
+      });
+    });
   }
 
   private makeCircle(key: string, fill: number, stroke: number, radius: number): void {
