@@ -36,7 +36,7 @@ export type PowerUpType =
   | 'beastCall'
   | 'remoteHex'
   | 'crownSurge';
-export type GameMode = 'classic' | 'shards' | 'sandbox' | 'survival' | 'royale' | 'dominion';
+export type GameMode = 'classic' | 'shards' | 'grand' | 'sandbox' | 'survival' | 'royale' | 'dominion';
 export type BotState =
   | 'IDLE'
   | 'SEEK_BLOCK'

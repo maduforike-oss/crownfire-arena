@@ -4,6 +4,8 @@ import { addPanel, addSceneBackdrop, addScreenTitle } from '../ui/ScenePresentat
 import { SESSION } from '../config/GameConfig';
 import { getCharacter } from '../config/Characters';
 import { AudioSystem } from '../systems/AudioSystem';
+import { NetworkSession } from '../network/NetworkSession';
+import type { NetworkMatchConfig } from '../network/NetworkProtocol';
 
 interface ResultsData {
   title?: string;
@@ -30,6 +32,7 @@ export class ResultsScene extends Phaser.Scene {
 
   create(): void {
     const d = this.dataIn;
+    const network = NetworkSession.get();
     AudioSystem.get().startMusic(d.menuOnly ? 'menu' : 'results', SESSION.map);
     addSceneBackdrop(this, { theme: d.won ? 'ashen' : 'hollowmoon', alternateTheme: SESSION.map as 'ashen' | 'moonfang' | 'frostkeep' | 'hollowmoon', imageAlpha: 0.52, veilAlpha: d.menuOnly ? 0.7 : 0.54 });
     addPanel(this, 640, 386, 760, 470, d.won ? 0xd8a84e : 0x8f3e46, 0.95);
@@ -60,7 +63,34 @@ export class ResultsScene extends Phaser.Scene {
         color: '#9ec8ff'
       }).setOrigin(0.5);
     }
-    menuButton(this, contentX, 500, d.menuOnly ? 'Back' : 'Restart Trial', () => this.scene.start(d.menuOnly ? 'MainMenuScene' : 'GameScene'), false, 300);
-    if (!d.menuOnly) menuButton(this, contentX, 562, 'Main Menu', () => this.scene.start('MainMenuScene'), false, 300);
+    const restartLabel = !d.menuOnly && network.active && network.role === 'guest' ? 'Waiting for Host' : d.menuOnly ? 'Back' : 'Restart Trial';
+    menuButton(this, contentX, 500, restartLabel, () => {
+      if (d.menuOnly) {
+        this.scene.start('MainMenuScene');
+      } else if (!network.active) {
+        this.scene.start('GameScene');
+      } else if (network.role === 'host' && network.matchConfig) {
+        network.startMatch(network.matchConfig);
+        this.scene.start('GameScene');
+      }
+    }, false, 300);
+    if (!d.menuOnly) {
+      menuButton(this, contentX, 562, 'Main Menu', () => {
+        network.leave();
+        this.scene.start('MainMenuScene');
+      }, false, 300);
+    }
+    if (network.active) {
+      network.addEventListener('start', this.onNetworkRestart);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => network.removeEventListener('start', this.onNetworkRestart));
+    }
   }
+
+  private readonly onNetworkRestart = (event: Event): void => {
+    const config = (event as CustomEvent<NetworkMatchConfig>).detail;
+    SESSION.map = config.map;
+    SESSION.mode = config.mode;
+    SESSION.character = NetworkSession.get().role === 'guest' ? config.guestCharacter : config.hostCharacter;
+    this.scene.start('GameScene');
+  };
 }

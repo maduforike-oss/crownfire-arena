@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SESSION, GAME_CONFIG } from '../config/GameConfig';
-import { MAPS } from '../config/Maps';
+import { MAPS, makeExpandedMap } from '../config/Maps';
 import { MODES } from '../config/Modes';
 import { CHARACTERS, makeStats } from '../config/Characters';
 import { getPowerUp } from '../config/PowerUps';
@@ -30,6 +30,14 @@ import { POWER_UPS } from '../config/PowerUps';
 import { setMatchPresentation, type DeviceProfile } from '../systems/DeviceProfile';
 import { menuButton } from '../ui/MenuButton';
 import { DragonBlastVfxSystem } from '../systems/DragonBlastVfxSystem';
+import { NetworkSession } from '../network/NetworkSession';
+import type {
+  NetworkGameplayPayload,
+  NetworkInputState,
+  NetworkMatchSnapshot
+} from '../network/NetworkProtocol';
+import { Bomb } from '../entities/Bomb';
+import { PowerUp } from '../entities/PowerUp';
 
 export class GameScene extends Phaser.Scene {
   private grid!: GridSystem;
@@ -71,6 +79,22 @@ export class GameScene extends Phaser.Scene {
   private sandboxOpen = false;
   private sandboxPanel?: Phaser.GameObjects.Container;
   private sandboxLauncher?: Phaser.GameObjects.Container;
+  private readonly network = NetworkSession.get();
+  private remoteInput: NetworkInputState = {
+    direction: 'none',
+    bomb: false,
+    special: false,
+    remote: false,
+    pause: false,
+    sequence: 0
+  };
+  private networkSnapshotMs = 0;
+  private networkInputMs = 0;
+  private networkInputSequence = 0;
+  private networkSnapshotSequence = 0;
+  private lastReceivedSnapshotSequence = 0;
+  private lastNetworkDirection: Direction = 'none';
+  private networkStatusText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('GameScene');
@@ -82,7 +106,8 @@ export class GameScene extends Phaser.Scene {
     AudioSystem.get().startMusic('battle', SESSION.map);
     this.input.keyboard?.once('keydown-M', () => this.toggleMute());
     this.input.once('pointerdown', () => AudioSystem.get().startMusic('battle', SESSION.map));
-    const map = MAPS.find((m) => m.id === SESSION.map) ?? MAPS[0];
+    const selectedMap = MAPS.find((m) => m.id === SESSION.map) ?? MAPS[0];
+    const map = SESSION.mode === 'grand' ? makeExpandedMap(selectedMap) : selectedMap;
     const modeDef = MODES.find((m) => m.id === SESSION.mode) ?? MODES[0];
     this.grid = new GridSystem(map);
     this.shrineTile = { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
@@ -114,6 +139,7 @@ export class GameScene extends Phaser.Scene {
       this.createSandboxLauncher();
       this.input.keyboard?.on('keydown-T', this.toggleSandboxLab, this);
     }
+    if (this.network.active) this.setupNetworkMatch();
     this.showRoundIntro();
     AudioSystem.get().sfx('matchStart');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
@@ -121,7 +147,13 @@ export class GameScene extends Phaser.Scene {
 
   update(_: number, delta: number): void {
     if (this.ended) return;
-    if (this.human.consumePause() || this.touch?.consumePause()) this.togglePause();
+    const pausePressed = this.human.consumePause() || this.touch?.consumePause();
+    if (this.network.active && this.network.role === 'guest') {
+      if (pausePressed) this.sendGuestInput('none', false, false, false, true);
+      if (!this.paused) this.updateNetworkGuest(Math.min(delta, 34));
+      return;
+    }
+    if (pausePressed) this.togglePause();
     if (this.paused) return;
     if (this.sandboxOpen) return;
     const dt = Math.min(delta, 34);
@@ -132,15 +164,333 @@ export class GameScene extends Phaser.Scene {
     this.resolveChampionSurgeTouches();
     this.updateHuman(dt);
     this.updateHuman2(dt);
+    if (this.network.active && this.network.role === 'host') this.updateNetworkRemote(dt);
     this.updateBots(dt);
     const explosions = this.bombs.update(dt, this.actors);
     for (const explosion of explosions) this.resolveExplosion(explosion);
     this.danger.rebuild(this.bombs.bombs, this.bombs.activeBlastTiles());
     this.collectPowerUps();
     this.syncSprites();
-    const result = this.mode.update(dt, this.player, this.actors);
-    this.hud.update(this.player, this.actors.filter((a) => !a.isHuman && a.alive).length, this.mode.elapsedMs);
-    if (result?.done) this.finish(result.won, result.reason);
+    if (this.network.active && this.network.role === 'host') {
+      this.mode.elapsedMs += dt;
+      this.hud.update(this.player, this.actors.filter((actor) => actor !== this.player && actor.alive).length, this.mode.elapsedMs);
+      this.updateNetworkResult();
+      this.broadcastNetworkSnapshot(dt);
+    } else {
+      const result = this.mode.update(dt, this.player, this.actors);
+      this.hud.update(this.player, this.actors.filter((a) => !a.isHuman && a.alive).length, this.mode.elapsedMs);
+      if (result?.done) this.finish(result.won, result.reason);
+    }
+  }
+
+  private setupNetworkMatch(): void {
+    this.network.addEventListener('game', this.onNetworkGame);
+    this.network.addEventListener('status', this.onNetworkStatus);
+    this.network.addEventListener('lost', this.onNetworkLost);
+    this.networkStatusText = this.add.text(640, 704, `LAN ${this.network.room}  |  ${this.network.role?.toUpperCase()}`, {
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fontSize: '11px',
+      color: '#9dc8ff',
+      stroke: '#08080c',
+      strokeThickness: 3
+    }).setOrigin(0.5, 1).setDepth(190);
+    this.uiLayer.add(this.networkStatusText);
+    this.network.send({ kind: 'profile', character: this.player.character });
+  }
+
+  private readonly onNetworkGame = (event: Event): void => {
+    const payload = (event as CustomEvent<NetworkGameplayPayload>).detail;
+    if (this.network.role === 'host') {
+      if (payload.kind !== 'input') return;
+      if (payload.input.sequence <= this.remoteInput.sequence) return;
+      this.remoteInput = payload.input;
+      if (payload.input.pause) this.togglePause();
+      return;
+    }
+    if (payload.kind === 'snapshot') {
+      this.applyNetworkSnapshot(payload.snapshot);
+    } else if (payload.kind === 'explosion') {
+      this.explosionFx.renderExplosion(payload.tiles, getBombTheme(payload.themeId));
+      AudioSystem.get().sfx('explosion');
+    } else if (payload.kind === 'dragonBlast') {
+      this.dragonBlastFx.fire(payload.origin, payload.tiles, payload.direction);
+      AudioSystem.get().sfx('dragonBlast');
+    } else if (payload.kind === 'matchEnd') {
+      if (!this.ended) this.finish(payload.winnerId === this.player.id, payload.reason);
+    } else if (payload.kind === 'restart') {
+      this.scene.restart();
+    } else if (payload.kind === 'pause') {
+      this.setGuestNetworkPaused(payload.paused);
+    }
+  };
+
+  private readonly onNetworkStatus = (event: Event): void => {
+    const status = (event as CustomEvent<string>).detail;
+    this.networkStatusText?.setText(
+      status === 'reconnecting'
+        ? `LAN ${this.network.room}  |  RECONNECTING...`
+        : `LAN ${this.network.room}  |  ${status.toUpperCase()}`
+    );
+    this.networkStatusText?.setColor(status === 'reconnecting' ? '#f7d783' : '#9dc8ff');
+  };
+
+  private readonly onNetworkLost = (): void => {
+    if (this.ended) return;
+    this.ended = true;
+    const notice = this.add.text(640, 360, 'LAN connection lost\nReturning to a fresh room...', {
+      fontFamily: 'Georgia',
+      fontSize: '28px',
+      align: 'center',
+      color: '#f4ead2',
+      stroke: '#08080c',
+      strokeThickness: 5
+    }).setOrigin(0.5).setDepth(250);
+    this.time.delayedCall(1200, () => {
+      notice.destroy();
+      this.network.leave();
+      this.scene.start('MultiplayerLobbyScene');
+    });
+  };
+
+  private updateNetworkGuest(dt: number): void {
+    this.networkInputMs += dt;
+    this.touch?.setRemoteAvailable(this.player.stats.remoteArmedBombs);
+    const touchDirection = this.touch?.direction() ?? 'none';
+    const direction = touchDirection !== 'none' ? touchDirection : this.human.direction();
+    const bomb = this.human.consumeBomb() || Boolean(this.touch?.consumeBomb());
+    const special = this.human.consumeSpecial() || Boolean(this.touch?.consumeSpecial());
+    const remote = this.human.consumeRemote() || Boolean(this.touch?.consumeRemote());
+    if (direction !== this.lastNetworkDirection || bomb || special || remote || this.networkInputMs >= 90) {
+      this.sendGuestInput(direction, bomb, special, remote, false);
+      this.lastNetworkDirection = direction;
+      this.networkInputMs = 0;
+    }
+    this.syncSprites();
+    this.updateFrostZones(0);
+    this.updateShrineVisual();
+    this.hud.update(this.player, this.actors.filter((actor) => actor !== this.player && actor.alive).length, this.mode.elapsedMs);
+  }
+
+  private sendGuestInput(
+    direction: Direction,
+    bomb: boolean,
+    special: boolean,
+    remote: boolean,
+    pause: boolean
+  ): void {
+    this.network.send({
+      kind: 'input',
+      input: {
+        direction,
+        bomb,
+        special,
+        remote,
+        pause,
+        sequence: ++this.networkInputSequence
+      }
+    });
+  }
+
+  private updateNetworkRemote(dt: number): void {
+    const remote = this.actors.find((actor) => actor.id === 'network-guest');
+    if (!remote) return;
+    this.moveActor(remote, this.remoteInput.direction, dt);
+    if (this.remoteInput.bomb) {
+      this.placeBomb(remote);
+      this.remoteInput.bomb = false;
+    }
+    if (this.remoteInput.special) {
+      this.useSpecial(remote);
+      this.remoteInput.special = false;
+    }
+    if (this.remoteInput.remote) {
+      const explosions = this.bombs.detonateRemote(remote.id, this.actors);
+      for (const explosion of explosions) this.resolveExplosion(explosion);
+      this.remoteInput.remote = false;
+    }
+  }
+
+  private broadcastNetworkSnapshot(dt: number): void {
+    this.networkSnapshotMs += dt;
+    if (this.networkSnapshotMs < 66) return;
+    this.networkSnapshotMs = 0;
+    const snapshot: NetworkMatchSnapshot = {
+      sequence: ++this.networkSnapshotSequence,
+      actors: this.actors.map((actor) => ({
+        id: actor.id,
+        name: actor.name,
+        character: actor.character,
+        grid: { ...actor.grid },
+        world: { ...actor.world },
+        stats: { ...actor.stats },
+        alive: actor.alive,
+        kills: actor.kills,
+        shards: actor.shards,
+        slowedMs: actor.slowedMs,
+        snaredMs: actor.snaredMs,
+        frostTrailMs: actor.frostTrailMs,
+        specialCooldownMs: actor.specialCooldownMs,
+        lastDir: { ...actor.lastDir },
+        humanSlot: actor.id === 'player' ? 'host' : actor.id === 'network-guest' ? 'guest' : 'bot'
+      })),
+      bombs: this.bombs.bombs.map((bomb) => ({
+        id: bomb.id,
+        ownerId: bomb.ownerId,
+        grid: { ...bomb.grid },
+        remainingMs: bomb.remainingMs,
+        radius: bomb.radius,
+        themeId: bomb.themeId,
+        previewTiles: bomb.previewTiles.map((tile) => ({ ...tile })),
+        remote: bomb.remote,
+        frost: bomb.frost,
+        dragonCore: bomb.dragonCore
+      })),
+      destructibles: [...this.grid.tiles.entries()]
+        .filter(([, tile]) => tile === 'destructible')
+        .map(([key]) => key),
+      powers: this.powers.powerUps.map((power) => ({
+        id: power.id,
+        type: power.type,
+        grid: { ...power.grid }
+      })),
+      shards: [...this.powerSprites.keys()].filter((key) => key.startsWith('shard-')),
+      frostZones: [...this.frostZones].map(([key, remainingMs]) => ({
+        key,
+        remainingMs,
+        ownerId: this.frostZoneOwners.get(key) ?? ''
+      })),
+      elapsedMs: this.mode.elapsedMs,
+      shrineTimerMs: this.shrineTimerMs
+    };
+    this.network.send({ kind: 'snapshot', snapshot });
+  }
+
+  private applyNetworkSnapshot(snapshot: NetworkMatchSnapshot): void {
+    if (snapshot.sequence <= this.lastReceivedSnapshotSequence) return;
+    this.lastReceivedSnapshotSequence = snapshot.sequence;
+    for (const incoming of snapshot.actors) {
+      const actor = this.actors.find((candidate) => candidate.id === incoming.id);
+      if (!actor) continue;
+      actor.grid = { ...incoming.grid };
+      actor.world = { ...incoming.world };
+      Object.assign(actor.stats, incoming.stats);
+      actor.alive = incoming.alive;
+      actor.kills = incoming.kills;
+      actor.shards = incoming.shards;
+      actor.slowedMs = incoming.slowedMs;
+      actor.snaredMs = incoming.snaredMs;
+      actor.frostTrailMs = incoming.frostTrailMs;
+      actor.specialCooldownMs = incoming.specialCooldownMs;
+      actor.lastDir = { ...incoming.lastDir };
+    }
+
+    const destructibles = new Set(snapshot.destructibles);
+    for (const [key, tile] of [...this.grid.tiles]) {
+      if (tile !== 'destructible' || destructibles.has(key)) continue;
+      this.grid.tiles.set(key, 'empty');
+      this.blockSprites.get(key)?.destroy(true);
+      this.blockSprites.delete(key);
+    }
+
+    this.bombs.bombs.length = 0;
+    for (const incoming of snapshot.bombs) {
+      const bomb = new Bomb(
+        incoming.id,
+        incoming.ownerId,
+        { ...incoming.grid },
+        incoming.remainingMs,
+        incoming.radius,
+        incoming.themeId
+      );
+      bomb.remainingMs = incoming.remainingMs;
+      bomb.previewTiles = incoming.previewTiles.map((tile) => ({ ...tile }));
+      bomb.remote = incoming.remote;
+      bomb.frost = incoming.frost;
+      bomb.dragonCore = incoming.dragonCore;
+      this.bombs.bombs.push(bomb);
+    }
+
+    this.powers.powerUps.length = 0;
+    for (const incoming of snapshot.powers) {
+      this.powers.powerUps.push(new PowerUp(incoming.id, incoming.type, { ...incoming.grid }));
+    }
+    const visiblePickups = new Set([...snapshot.powers.map((power) => power.id), ...snapshot.shards]);
+    for (const [id, sprite] of [...this.powerSprites]) {
+      if (!visiblePickups.has(id)) {
+        sprite.destroy(true);
+        this.powerSprites.delete(id);
+      }
+    }
+    for (const shardId of snapshot.shards) {
+      if (this.powerSprites.has(shardId)) continue;
+      const coordinates = shardId.replace('shard-', '').split(',').map(Number);
+      this.spawnShard({ x: coordinates[0], y: coordinates[1] });
+    }
+
+    this.frostZones.clear();
+    this.frostZoneOwners.clear();
+    for (const zone of snapshot.frostZones) {
+      this.frostZones.set(zone.key, zone.remainingMs);
+      this.frostZoneOwners.set(zone.key, zone.ownerId);
+    }
+    for (const [key, sprite] of [...this.frostSprites]) {
+      if (!this.frostZones.has(key)) {
+        sprite.destroy(true);
+        this.frostSprites.delete(key);
+      }
+    }
+    this.mode.elapsedMs = snapshot.elapsedMs;
+    this.shrineTimerMs = snapshot.shrineTimerMs;
+  }
+
+  private updateNetworkResult(): void {
+    if (this.mode.elapsedMs < 1600 || this.ended) return;
+    if (SESSION.mode === 'shards') {
+      const winner = this.actors.find((actor) => actor.shards >= 10);
+      if (winner) {
+        this.endNetworkMatch(winner.id, `${winner.name} claimed ten Crown Shards.`);
+        return;
+      }
+      if (this.mode.elapsedMs >= 180000) {
+        const ranked = [...this.actors].sort((a, b) => b.shards - a.shards);
+        this.endNetworkMatch(ranked[0]?.id, 'The Crown Shard clock expired.');
+        return;
+      }
+    }
+    const living = this.actors.filter((actor) => actor.alive);
+    if (living.length <= 1) {
+      this.endNetworkMatch(living[0]?.id, living[0] ? `${living[0].name} claimed the LAN trial.` : 'No champion survived the rune war.');
+    }
+  }
+
+  private endNetworkMatch(winnerId: string | undefined, reason: string): void {
+    this.network.send({ kind: 'matchEnd', winnerId, reason });
+    this.finish(winnerId === this.player.id, reason);
+  }
+
+  private setGuestNetworkPaused(paused: boolean): void {
+    if (paused === this.paused) return;
+    if (!paused) {
+      this.pausedText?.destroy(true);
+      this.pausedText = undefined;
+      this.paused = false;
+      return;
+    }
+    const shade = this.add.rectangle(640, 360, 1280, 720, 0x05060a, 0.68).setInteractive();
+    const panel = this.add.rectangle(640, 360, 480, 190, 0x111018, 0.98).setStrokeStyle(2, 0x9dc8ff);
+    const title = this.add.text(640, 330, 'LAN Trial Paused', {
+      fontFamily: 'Georgia',
+      fontSize: '34px',
+      color: '#f7d783'
+    }).setOrigin(0.5);
+    const hint = this.add.text(640, 390, 'Either champion can press pause to resume.', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#b5a995'
+    }).setOrigin(0.5);
+    this.pausedText = this.add.container(0, 0, [shade, panel, title, hint]).setDepth(240);
+    this.paused = true;
   }
 
   private drawArena(): void {
@@ -154,10 +504,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnActors(): void {
-    const mainChar = CHARACTERS.find((c) => c.id === SESSION.character) ?? CHARACTERS[0];
+    const hostCharacter = this.network.active
+      ? this.network.matchConfig?.hostCharacter ?? SESSION.character
+      : SESSION.character;
+    const mainChar = CHARACTERS.find((c) => c.id === hostCharacter) ?? CHARACTERS[0];
     const spawn = this.grid.map.spawns[0];
-    this.player = new Player('player', mainChar.name, mainChar.id, { ...spawn }, this.grid.toWorld(spawn), makeStats(mainChar.id), true, mainChar.palette, mainChar.accent);
-    this.actors = [this.player];
+    const hostPlayer = new Player(
+      'player',
+      mainChar.name,
+      mainChar.id,
+      { ...spawn },
+      this.grid.toWorld(spawn),
+      makeStats(mainChar.id),
+      !this.network.active || this.network.role === 'host',
+      mainChar.palette,
+      mainChar.accent
+    );
+    this.player = hostPlayer;
+    this.actors = [hostPlayer];
     if (SESSION.mode === 'sandbox') {
       const targetDef = CHARACTERS.find((character) => character.id === 'stone') ?? CHARACTERS[0];
       const targetSpawn = this.grid.map.spawns[2];
@@ -175,6 +539,46 @@ export class GameScene extends Phaser.Scene {
       target.stats.health = 20;
       target.stats.maxHealth = 20;
       this.actors.push(target);
+      for (const actor of this.actors) this.makeActorView(actor);
+      return;
+    }
+    if (this.network.active) {
+      const guestCharacter = this.network.matchConfig?.guestCharacter
+        ?? (this.network.role === 'host' ? this.network.remoteCharacter : SESSION.character);
+      const guestDef = CHARACTERS.find((character) => character.id === guestCharacter) ?? CHARACTERS[1];
+      const guestSpawn = this.grid.map.spawns[1];
+      const guest = new Player(
+        'network-guest',
+        guestDef.name,
+        guestDef.id,
+        { ...guestSpawn },
+        this.grid.toWorld(guestSpawn),
+        makeStats(guestDef.id),
+        this.network.role === 'guest',
+        guestDef.palette,
+        guestDef.accent
+      );
+      this.actors.push(guest);
+      if (this.network.role === 'guest') this.player = guest;
+      const botDefs = ['frost', 'veil'] as const;
+      for (let i = 2; i < 4; i += 1) {
+        const botDef = CHARACTERS.find((character) => character.id === botDefs[i - 2]) ?? CHARACTERS[0];
+        const botSpawn = this.grid.map.spawns[i];
+        const bot = new Bot(
+          `bot-${i}`,
+          botDef.name,
+          botDef.id,
+          { ...botSpawn },
+          this.grid.toWorld(botSpawn),
+          makeStats(botDef.id),
+          false,
+          botDef.palette,
+          botDef.accent
+        );
+        bot.stats.health = 2;
+        bot.stats.maxHealth = 2;
+        this.actors.push(bot);
+      }
       for (const actor of this.actors) this.makeActorView(actor);
       return;
     }
@@ -285,8 +689,9 @@ export class GameScene extends Phaser.Scene {
     if (d.y !== 0) nextWorld.x = Phaser.Math.Linear(actor.world.x, center.x, 0.22);
     actor.world = nextWorld;
     const bounds = this.grid.toWorld(actor.grid);
-    actor.world.x = clamp(actor.world.x, bounds.x - 24, bounds.x + 24);
-    actor.world.y = clamp(actor.world.y, bounds.y - 24, bounds.y + 24);
+    const halfTile = this.grid.tileSize / 2;
+    actor.world.x = clamp(actor.world.x, bounds.x - halfTile, bounds.x + halfTile);
+    actor.world.y = clamp(actor.world.y, bounds.y - halfTile, bounds.y + halfTile);
     if (!sameTile(previousGrid, actor.grid) && actor.frostTrailMs > 0) {
       this.addFrostZone(previousGrid, 4200, actor.id);
       this.addFrostZone(actor.grid, 4200, actor.id);
@@ -308,6 +713,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveExplosion(explosion: import('../entities/Explosion').Explosion): void {
+    if (this.network.active && this.network.role === 'host') {
+      this.network.send({
+        kind: 'explosion',
+        tiles: explosion.tiles.map((tile) => ({ ...tile })),
+        themeId: explosion.themeId,
+        frost: explosion.frost
+      });
+    }
     this.explosionFx.renderExplosion(explosion.tiles, getBombTheme(explosion.themeId));
     for (const tile of explosion.tiles) {
       const block = this.blockSprites.get(keyOf(tile));
@@ -739,7 +1152,7 @@ export class GameScene extends Phaser.Scene {
           const [x, y] = key.split(',').map(Number);
           const w = this.grid.toWorld({ x, y });
           const frost = this.add.container(w.x, w.y);
-          const tile = this.add.rectangle(0, 0, GAME_CONFIG.tileSize - 8, GAME_CONFIG.tileSize - 8, 0x75d7ff, 0.16)
+          const tile = this.add.rectangle(0, 0, this.grid.tileSize - 8, this.grid.tileSize - 8, 0x75d7ff, 0.16)
             .setStrokeStyle(2, 0xd8f7ff, 0.58);
           const rune = this.add.image(0, 0, 'blast-frost').setDisplaySize(42, 42).setAlpha(0.48);
           const shardA = this.add.triangle(-12, 9, 0, -12, 5, 8, -5, 8, 0xd8f7ff, 0.72);
@@ -813,6 +1226,14 @@ export class GameScene extends Phaser.Scene {
       telegraph.forEach((item) => item.destroy());
       if (!actor.alive || this.ended) return;
       this.dragonBlastFx.fire(actor.grid, tiles, direction);
+      if (this.network.active && this.network.role === 'host') {
+        this.network.send({
+          kind: 'dragonBlast',
+          origin: { ...actor.grid },
+          tiles: tiles.map((tile) => ({ ...tile })),
+          direction: { ...direction }
+        });
+      }
 
       for (const target of this.actors) {
         if (target === actor || !target.alive || !tiles.some((tile) => sameTile(tile, target.grid))) continue;
@@ -1047,6 +1468,7 @@ export class GameScene extends Phaser.Scene {
     const menu = menuButton(this, 640, 462, 'Main Menu', () => this.returnToMainMenu(), false, 320);
     this.pausedText = this.add.container(0, 0, [shade, bg, label, hint, resume, restart, menu]).setDepth(240);
     this.paused = true;
+    if (this.network.active && this.network.role === 'host') this.network.send({ kind: 'pause', paused: true });
     this.input.keyboard?.once('keydown-R', this.restartTrial, this);
     this.input.keyboard?.once('keydown-Q', this.returnToMainMenu, this);
   }
@@ -1057,15 +1479,18 @@ export class GameScene extends Phaser.Scene {
     this.pausedText?.destroy(true);
     this.pausedText = undefined;
     this.paused = false;
+    if (this.network.active && this.network.role === 'host') this.network.send({ kind: 'pause', paused: false });
   }
 
   private restartTrial(): void {
     this.closePauseOverlay();
+    if (this.network.active && this.network.role === 'host') this.network.send({ kind: 'restart' });
     this.scene.restart();
   }
 
   private returnToMainMenu(): void {
     this.closePauseOverlay();
+    if (this.network.active) this.network.leave();
     this.scene.start('MainMenuScene');
   }
 
@@ -1128,6 +1553,13 @@ export class GameScene extends Phaser.Scene {
     this.sandboxOpen = false;
     this.sandboxPanel = undefined;
     this.sandboxLauncher = undefined;
+    this.networkSnapshotMs = 0;
+    this.networkInputMs = 0;
+    this.networkInputSequence = 0;
+    this.networkSnapshotSequence = 0;
+    this.lastReceivedSnapshotSequence = 0;
+    this.lastNetworkDirection = 'none';
+    this.networkStatusText = undefined;
   }
 
   private shutdown(): void {
@@ -1137,6 +1569,9 @@ export class GameScene extends Phaser.Scene {
     this.bombViews?.cleanup();
     this.tweens.killAll();
     this.input.keyboard?.removeAllListeners();
+    this.network.removeEventListener('game', this.onNetworkGame);
+    this.network.removeEventListener('status', this.onNetworkStatus);
+    this.network.removeEventListener('lost', this.onNetworkLost);
     this.powerSprites.clear();
     this.blockSprites.clear();
     this.views.clear();

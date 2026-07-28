@@ -11,6 +11,7 @@ import { GameScene } from './game/scenes/GameScene';
 import { ResultsScene } from './game/scenes/ResultsScene';
 import { PowerUpGuideScene } from './game/scenes/PowerUpGuideScene';
 import { ControllerSetupScene } from './game/scenes/ControllerSetupScene';
+import { MultiplayerLobbyScene } from './game/scenes/MultiplayerLobbyScene';
 import { registerServiceWorker } from './game/systems/PWAInstall';
 import { installDevicePresentation } from './game/systems/DeviceProfile';
 
@@ -30,6 +31,9 @@ new Phaser.Game({
     activePointers: 4,
     touch: { capture: true }
   },
+  dom: {
+    createContainer: true
+  },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
@@ -43,6 +47,7 @@ new Phaser.Game({
     MapSelectScene,
     PowerUpGuideScene,
     ControllerSetupScene,
+    MultiplayerLobbyScene,
     GameScene,
     ResultsScene
   ]

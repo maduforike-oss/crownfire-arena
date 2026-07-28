@@ -6,6 +6,8 @@ export interface MapDef {
   theme: string;
   width: number;
   height: number;
+  tileSize?: number;
+  destructibleDensity?: number;
   floor: number;
   wall: number;
   block: number;
@@ -88,3 +90,22 @@ export const MAPS: MapDef[] = [
     ]
   }
 ];
+
+export function makeExpandedMap(map: MapDef): MapDef {
+  return {
+    ...map,
+    id: map.id,
+    name: `${map.name} Expanse`,
+    theme: `${map.theme}; expanded contested lanes`,
+    width: 19,
+    height: 15,
+    tileSize: 40,
+    destructibleDensity: 48,
+    spawns: [
+      { x: 1, y: 1 },
+      { x: 17, y: 13 },
+      { x: 17, y: 1 },
+      { x: 1, y: 13 }
+    ]
+  };
+}

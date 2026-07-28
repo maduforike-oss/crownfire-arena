@@ -18,10 +18,12 @@ export function generateMapTiles(map: MapDef): GeneratedMap {
       const pillar = x % 2 === 0 && y % 2 === 0;
       let tile: TileType = edge || pillar ? 'solid' : 'empty';
       const seeded = (x * 41 + y * 71 + map.id.length * 17) % 100;
-      if (tile === 'empty' && !reserved.has(keyOf(pos)) && seeded < 62) tile = 'destructible';
+      if (tile === 'empty' && !reserved.has(keyOf(pos)) && seeded < (map.destructibleDensity ?? 62)) tile = 'destructible';
       tiles.set(keyOf(pos), tile);
     }
   }
+  const shrine = { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
+  if (tiles.get(keyOf(shrine)) !== 'solid') tiles.set(keyOf(shrine), 'empty');
   enforceEscapePaths(map, tiles, reserved);
   return { tiles, reserved };
 }

@@ -22,7 +22,7 @@ export class MapRenderer {
 
   render(grid: GridSystem, layers: Layers, shrineTile: GridPosition, debugSpawnSafe = false): RenderedMap {
     const theme = getMapTheme(grid.map.id);
-    const boardBounds = this.boardBounds(grid.map);
+    const boardBounds = this.boardBounds(grid);
     const blockSprites = new Map<string, Phaser.GameObjects.Container>();
 
     this.renderBackplate(grid.map, boardBounds);
@@ -35,7 +35,7 @@ export class MapRenderer {
         const pos = { x, y };
         const world = grid.toWorld(pos);
         const floorKey = `map-${grid.map.id}-floor-${this.floorVariant(grid.map.id, x, y)}`;
-        const floor = this.scene.add.image(world.x, world.y, floorKey).setDisplaySize(GAME_CONFIG.tileSize, GAME_CONFIG.tileSize);
+        const floor = this.scene.add.image(world.x, world.y, floorKey).setDisplaySize(grid.tileSize, grid.tileSize);
         if (this.scene.textures.exists(`map-${grid.map.id}-premium-floor`)) floor.setAlpha(0.025);
         layers.tileLayer.add(floor);
 
@@ -141,7 +141,7 @@ export class MapRenderer {
     pad.setAlpha(isCoreSpawn ? 0.75 : 0.18);
     tileLayer.add(pad);
     if (debug) {
-      tileLayer.add(this.scene.add.rectangle(world.x, world.y, GAME_CONFIG.tileSize - 8, GAME_CONFIG.tileSize - 8, grid.map.glow, 0.08)
+      tileLayer.add(this.scene.add.rectangle(world.x, world.y, grid.tileSize - 8, grid.tileSize - 8, grid.map.glow, 0.08)
         .setStrokeStyle(1, grid.map.glow, 0.28));
     }
   }
@@ -191,8 +191,9 @@ export class MapRenderer {
     const premium = this.scene.textures.exists(premiumKey);
     if (premium) {
       wall.add(this.scene.add.ellipse(0, 17, 53, 20, 0x000000, 0.5));
-      const wallSize = grid.map.id === 'ashen' ? 76 : 64;
-      const wallOffset = grid.map.id === 'ashen' ? -10 : -5;
+      const scale = grid.tileSize / GAME_CONFIG.tileSize;
+      const wallSize = (grid.map.id === 'ashen' ? 76 : 64) * scale;
+      const wallOffset = (grid.map.id === 'ashen' ? -10 : -5) * scale;
       wall.add(this.scene.add.image(0, wallOffset, premiumKey).setDisplaySize(wallSize, wallSize));
     } else {
       wall.add(this.scene.add.image(0, 0, `map-${grid.map.id}-solid`).setDisplaySize(53, 53));
@@ -210,8 +211,9 @@ export class MapRenderer {
     const premium = this.scene.textures.exists(premiumKey);
     if (premium) {
       block.add(this.scene.add.ellipse(0, 17, 51, 18, 0x000000, 0.44));
-      const blockSize = grid.map.id === 'ashen' ? 70 : 58;
-      const blockOffset = grid.map.id === 'ashen' ? -7 : 0;
+      const scale = grid.tileSize / GAME_CONFIG.tileSize;
+      const blockSize = (grid.map.id === 'ashen' ? 70 : 58) * scale;
+      const blockOffset = (grid.map.id === 'ashen' ? -7 : 0) * scale;
       block.add(this.scene.add.image(0, blockOffset, premiumKey).setDisplaySize(blockSize, blockSize));
     } else {
       block.add(this.scene.add.image(0, 0, `map-${grid.map.id}-block`).setDisplaySize(52, 52));
@@ -279,10 +281,10 @@ export class MapRenderer {
     });
   }
 
-  private boardBounds(map: MapDef): Phaser.Geom.Rectangle {
-    const width = map.width * GAME_CONFIG.tileSize;
-    const height = map.height * GAME_CONFIG.tileSize;
-    return new Phaser.Geom.Rectangle((GAME_CONFIG.width - width) / 2, 76, width, height);
+  private boardBounds(grid: GridSystem): Phaser.Geom.Rectangle {
+    const width = grid.map.width * grid.tileSize;
+    const height = grid.map.height * grid.tileSize;
+    return new Phaser.Geom.Rectangle(grid.offsetX, grid.offsetY, width, height);
   }
 
   private floorVariant(mapId: string, x: number, y: number): number {

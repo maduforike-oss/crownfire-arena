@@ -70,6 +70,11 @@ canvas {
   transition: transform 180ms ease-out;
 }
 
+/* Phaser's DOM input layer must sit above the canvas for room-code entry. */
+#game > div {
+  z-index: 2;
+}
+
 body.device-touch #game {
   padding:
     max(env(safe-area-inset-top, 0px), 2px)
@@ -84,4 +89,26 @@ body.touch-match #game {
 
 body.device-phone canvas {
   box-shadow: none;
+}
+
+.crownfire-room-input {
+  width: 280px;
+  height: 52px;
+  box-sizing: border-box;
+  border: 2px solid #9dc8ff;
+  border-radius: 4px;
+  outline: none;
+  background: rgba(11, 13, 20, 0.96);
+  color: #f7d783;
+  font: 700 24px/1 Arial, sans-serif;
+  letter-spacing: 6px;
+  text-align: center;
+  text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(79, 139, 204, 0.2);
+}
+
+.crownfire-room-input::placeholder {
+  color: #727f93;
+  font-size: 15px;
+  letter-spacing: 2px;
 }

@@ -42,23 +42,24 @@ export class MainMenuScene extends Phaser.Scene {
       fontSize: '15px',
       color: '#f7c56f'
     }).setOrigin(0.5).setLetterSpacing(2);
-    addPanel(this, 640, 420, 402, 470, 0xd8a84e, 0.91);
+    addPanel(this, 640, 414, 402, 492, 0xd8a84e, 0.91);
     const save = loadSave();
     this.add.text(640, 210, `CROWNS  ${save.crowns}     VICTORIES  ${save.wins}`, {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '14px', color: '#9ec8ff'
     }).setOrigin(0.5);
-    menuButton(this, 640, 286, 'Enter the Arena', () => this.scene.start('CharacterSelectScene'), false, 338);
-    menuButton(this, 640, 354, 'Rune Guide', () => this.scene.start('PowerUpGuideScene'), false, 338);
-    menuButton(this, 640, 422, 'How to Play', () => this.showHow(), false, 338);
-    menuButton(this, 640, 490, AudioSystem.get().isMuted() ? 'Audio Off' : 'Audio On', () => {
+    menuButton(this, 640, 274, 'Enter the Arena', () => this.scene.start('CharacterSelectScene'), false, 338);
+    menuButton(this, 640, 336, 'Same-WiFi Arena', () => this.scene.start('MultiplayerLobbyScene'), false, 338);
+    menuButton(this, 640, 398, 'Rune Guide', () => this.scene.start('PowerUpGuideScene'), false, 338);
+    menuButton(this, 640, 460, 'How to Play', () => this.showHow(), false, 338);
+    menuButton(this, 640, 522, AudioSystem.get().isMuted() ? 'Audio Off' : 'Audio On', () => {
       AudioSystem.get().toggleMute();
       this.scene.restart();
     }, false, 338);
-    menuButton(this, 640, 558, 'Controller Setup', () => this.scene.start('ControllerSetupScene'), false, 338);
-    this.add.text(640, 606, 'iPad: Share menu  >  Add to Home Screen', {
+    menuButton(this, 640, 584, 'Controller Setup', () => this.scene.start('ControllerSetupScene'), false, 338);
+    this.add.text(640, 630, 'iPad: Share menu  >  Add to Home Screen', {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#c8b889'
     }).setOrigin(0.5);
-    this.add.text(640, 670, `${SESSION.localPlayers} PLAYER  |  ${SESSION.mode.toUpperCase()}  |  ${SESSION.map.toUpperCase()}`, {
+    this.add.text(640, 682, `${SESSION.localPlayers} PLAYER  |  ${SESSION.mode.toUpperCase()}  |  ${SESSION.map.toUpperCase()}`, {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '13px', color: '#c1b28f'
     }).setOrigin(0.5);
   }

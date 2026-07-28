@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG } from '../config/GameConfig';
 import type { GridPosition } from '../utils/types';
 import type { GridSystem } from './GridSystem';
 
@@ -42,16 +41,16 @@ export class DragonBlastVfxSystem {
       const lane = this.scene.add.rectangle(
         0,
         0,
-        horizontal ? GAME_CONFIG.tileSize - 5 : 13,
-        horizontal ? 13 : GAME_CONFIG.tileSize - 5,
+        horizontal ? this.grid.tileSize - 5 : 13,
+        horizontal ? 13 : this.grid.tileSize - 5,
         OUTER_COLOR,
         0.18
       ).setStrokeStyle(2, EDGE_COLOR, 0.82);
       const core = this.scene.add.rectangle(
         0,
         0,
-        horizontal ? GAME_CONFIG.tileSize - 14 : 4,
-        horizontal ? 4 : GAME_CONFIG.tileSize - 14,
+        horizontal ? this.grid.tileSize - 14 : 4,
+        horizontal ? 4 : this.grid.tileSize - 14,
         CORE_COLOR,
         0.62
       ).setBlendMode(Phaser.BlendModes.ADD);
@@ -78,7 +77,7 @@ export class DragonBlastVfxSystem {
     const source = this.grid.toWorld(origin);
     const end = this.grid.toWorld(tiles[tiles.length - 1]);
     const horizontal = direction.x !== 0;
-    const reach = Math.abs(horizontal ? end.x - source.x : end.y - source.y) + GAME_CONFIG.tileSize * 0.72;
+    const reach = Math.abs(horizontal ? end.x - source.x : end.y - source.y) + this.grid.tileSize * 0.72;
     const mouth = {
       x: source.x + direction.x * 16,
       y: source.y + direction.y * 16
@@ -241,8 +240,8 @@ export class DragonBlastVfxSystem {
     const scorch = this.scene.add.rectangle(
       world.x,
       world.y,
-      horizontal ? GAME_CONFIG.tileSize - 12 : 5,
-      horizontal ? 5 : GAME_CONFIG.tileSize - 12,
+      horizontal ? this.grid.tileSize - 12 : 5,
+      horizontal ? 5 : this.grid.tileSize - 12,
       0xff7a2d,
       0
     );

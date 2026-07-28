@@ -18,6 +18,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('champion-card-frame', 'assets/ui/champion_card_frame.png');
     this.load.image('champion-card-selected-frame', 'assets/ui/champion_card_selected_frame.png');
     this.load.image('menu-crownfire-hero', 'assets/menu/crownfire_hero.webp');
+    this.load.image('menu-arena-select-hero', 'assets/menu/arena_select_hero.png');
     this.load.image('map-ashen-premium-floor-glow', 'assets/maps/ashen/premium_floor_glow.webp');
     for (const character of CHARACTERS) this.load.image(character.assetKey, character.portraitPath);
     for (const animation of Object.values(CHAMPION_ANIMATIONS)) {

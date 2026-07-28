@@ -6,6 +6,7 @@ export type BackdropTheme = 'ashen' | 'moonfang' | 'frostkeep' | 'hollowmoon';
 export interface BackdropOptions {
   theme: BackdropTheme;
   alternateTheme?: BackdropTheme;
+  imageKey?: string;
   imageAlpha?: number;
   veilAlpha?: number;
   particles?: number;
@@ -13,14 +14,16 @@ export interface BackdropOptions {
 
 export function addSceneBackdrop(scene: Phaser.Scene, options: BackdropOptions): Phaser.GameObjects.Container {
   scene.cameras.main.fadeIn(260, 0, 0, 0);
-  const { theme, imageAlpha = 0.7, veilAlpha = 0.32 } = options;
+  const { theme, imageKey, imageAlpha = 0.7, veilAlpha = 0.32 } = options;
   const root = scene.add.container(0, 0).setDepth(-20);
   root.add(scene.add.rectangle(PRESENTATION.width / 2, PRESENTATION.height / 2, PRESENTATION.width, PRESENTATION.height, 0x07080d));
-  const hero = theme === 'ashen'
+  const hero = imageKey
+    ? scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, imageKey)
+    : theme === 'ashen'
     ? scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, 'menu-crownfire-hero')
     : scene.add.image(PRESENTATION.width / 2, PRESENTATION.height / 2, 'reference-arena-atlas', `reference-${theme}-board`);
   hero
-    .setDisplaySize(PRESENTATION.width, theme === 'ashen' ? PRESENTATION.height : 960)
+    .setDisplaySize(PRESENTATION.width, imageKey || theme === 'ashen' ? PRESENTATION.height : 960)
     .setAlpha(Math.min(0.82, imageAlpha));
   root.add(hero);
   root.add(scene.add.rectangle(

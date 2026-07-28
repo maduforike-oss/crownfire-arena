@@ -9,9 +9,11 @@ export class GridSystem {
   readonly spawnReserved = new Set<string>();
   readonly offsetX: number;
   readonly offsetY: number;
+  readonly tileSize: number;
 
   constructor(readonly map: MapDef) {
-    this.offsetX = (GAME_CONFIG.width - map.width * GAME_CONFIG.tileSize) / 2;
+    this.tileSize = map.tileSize ?? GAME_CONFIG.tileSize;
+    this.offsetX = (GAME_CONFIG.width - map.width * this.tileSize) / 2;
     this.offsetY = GAME_CONFIG.arenaTop;
     this.build();
   }
@@ -42,15 +44,15 @@ export class GridSystem {
 
   toWorld(pos: GridPosition): WorldPosition {
     return {
-      x: this.offsetX + pos.x * GAME_CONFIG.tileSize + GAME_CONFIG.tileSize / 2,
-      y: this.offsetY + pos.y * GAME_CONFIG.tileSize + GAME_CONFIG.tileSize / 2
+      x: this.offsetX + pos.x * this.tileSize + this.tileSize / 2,
+      y: this.offsetY + pos.y * this.tileSize + this.tileSize / 2
     };
   }
 
   toGrid(pos: WorldPosition): GridPosition {
     return {
-      x: Math.floor((pos.x - this.offsetX) / GAME_CONFIG.tileSize),
-      y: Math.floor((pos.y - this.offsetY) / GAME_CONFIG.tileSize)
+      x: Math.floor((pos.x - this.offsetX) / this.tileSize),
+      y: Math.floor((pos.y - this.offsetY) / this.tileSize)
     };
   }
 }

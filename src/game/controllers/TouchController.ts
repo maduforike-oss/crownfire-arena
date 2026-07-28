@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Direction } from '../utils/types';
 import type { DeviceProfile } from '../systems/DeviceProfile';
+import { PRESENTATION } from '../config/PresentationConfig';
 
 type TouchAction = 'bomb' | 'special' | 'remote' | 'pause';
 
@@ -21,16 +22,17 @@ export class TouchController {
 
   constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
     this.visible = profile.touch || scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
-    // Keep touch input inside the dedicated side rails. The playable arena spans
-    // x=280..1000, so these positions leave a full visual buffer around both
-    // lower spawn lanes even on scaled iPad canvases.
-    this.stickCenter = profile.compactHud ? { x: 136, y: 590 } : { x: 132, y: 590 };
+    // Touch controls live in the presentation rails, never in world-space. This
+    // stays true for both the 15 x 13 arena and the wider Grand Expanse map.
+    const leftRailCenter = PRESENTATION.leftRailWidth / 2;
+    const rightRailCenter = PRESENTATION.width - PRESENTATION.rightRailWidth / 2;
+    this.stickCenter = { x: leftRailCenter, y: 590 };
     this.root = scene.add.container(0, 0).setDepth(180).setScrollFactor(0).setVisible(this.visible);
     if (!this.visible) return;
 
     this.createJoystick();
-    const actionX = profile.compactHud ? 1184 : 1162;
-    const remoteX = profile.compactHud ? 1184 : 1210;
+    const actionX = rightRailCenter + 28;
+    const remoteX = rightRailCenter + 28;
     const pauseX = 1238;
     this.createActionButton(actionX, profile.compactHud ? 500 : 555, profile.compactHud ? 58 : 66, 0xf06a31, 'BOMB', 'bomb');
     this.createActionButton(actionX, profile.compactHud ? 632 : 628, profile.compactHud ? 48 : 54, 0xa974ff, 'POWER', 'special');

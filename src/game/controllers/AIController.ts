@@ -98,10 +98,17 @@ export class AIController {
     const targetDistance = target ? distance(bot.grid, target.grid) : Infinity;
     switch (bot.character) {
       case 'dragon':
+        // Dragon Blast is a cardinal line attack, so bots hold it until a rival
+        // is actually lined up within its six-tile reach.
+        return Boolean(
+          target
+          && targetDistance <= 6
+          && (target.grid.x === bot.grid.x || target.grid.y === bot.grid.y)
+        );
       case 'frost':
-        // Their current local specials arm the next bomb, so save the cast for
-        // an actual bomb setup instead of wasting it while roaming.
-        return settingBomb;
+        // Ice Feet is most useful while disengaging or when a nearby rival is
+        // likely to follow the trail into a bomb setup.
+        return escaping || targetDistance <= 4 || settingBomb;
       case 'wolf':
         return escaping || targetDistance >= 4 && targetDistance <= 7;
       case 'veil':

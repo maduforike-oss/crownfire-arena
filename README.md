@@ -15,6 +15,25 @@ On Windows systems that block PowerShell scripts, use `npm.cmd run dev`.
 
 For testing on a phone connected to the same Wi-Fi network, run `npm run dev:mobile` and open the displayed network URL. Production installation should use HTTPS so the service worker and offline cache are available.
 
+## Same-WiFi Multiplayer
+
+Build and start the included room server:
+
+```bash
+npm run multiplayer:host
+```
+
+The terminal prints a Wi-Fi address such as `http://192.168.1.20:4173`. Open that exact address on both devices while they are connected to the same Wi-Fi:
+
+1. On one device choose **Same-WiFi Arena**, then **Host Room**.
+2. On the second device choose **Same-WiFi Arena**, enter the five-character room code, then **Join Room**.
+3. The host chooses **Configure Match**, then Champion, Mode, and Arena.
+4. Keep the server terminal open for the duration of the match.
+
+The host is authoritative for movement, bombs, damage, pickups, bots, and match results. A dropped client retries for 15 seconds and its room seat is retained for 20 seconds. A real connection loss returns the player to the LAN lobby instead of leaving a frozen match.
+
+GitHub Pages hosts the solo/PWA client but cannot run a WebSocket room server. Same-WiFi play therefore uses the local address printed by `npm run multiplayer:host`.
+
 ## Controls
 
 - `WASD`: move
@@ -57,7 +76,8 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Rune bombs with fuse pulse, chain reactions, cross-shaped blasts, and destructible blocks
 - Power-up drops: Ember Rune, Twin Sigil, Wolf Sprint, Stoneguard Blessing, Dragonflame Core, Ghost Veil, Frost Snare, Raven Blink, Beast Call, Remote Hex, and Champion Surge
 - Eight selectable champions with large showcase portraits, stable layered animation, and themed special abilities
-- Classic Trial, Crown Shard Hunt, and pressure-free Rune Sandbox modes
+- Classic Trial, Crown Shard Hunt, Grand Expanse, and pressure-free Rune Sandbox modes
+- Two-player same-WiFi rooms with short room codes, reconnect tokens, synchronized pause/restart, and host-authoritative bots
 - Four original maps: Ashen Courtyard, Moonfang Ruins, Frost Crown Keep, Hollowmoon Sanctuary
 - Image-led Arena Select cards using the original kingdom vistas and arena concept paintings
 - Layered themed environments with eight floor variations, solid walls, destructible blocks, spawn pads, animated shrines, landscape art, ambient props, and border masonry
@@ -73,7 +93,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Bot AI uses a danger map, escape-path checks, rival targeting, block breaking, power-up seeking, centre pressure, and situational specials. It has one shared difficulty and no team tactics yet.
 - Champion animation uses stable portrait-layer motion, glows, particles, squash/stretch, and facing flips; authored directional frame sheets remain a future art pass.
 - The score is generated with WebAudio rather than recorded orchestral stems.
-- Online multiplayer is not implemented. Local two-player is available on one keyboard.
+- Same-WiFi multiplayer currently supports one host and one guest. Public internet matchmaking, host migration, spectators, and larger network rooms are not implemented.
 - Environment art is now PNG-based and textured, but the next jump toward the reference art quality would be hand-painted or AI-assisted tile atlases sliced into larger prop sets.
 
 ## Suggested Next Upgrades
@@ -83,14 +103,8 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Add AI difficulty profiles, short-term tile reservations, and deeper opponent prediction.
 - Add cosmetic unlock screen and more map hazards.
 
-## Multiplayer Roadmap
+## Multiplayer Next Steps
 
-Local two-player already uses the same deterministic grid rules as solo play. A production online mode should keep GitHub Pages as the client and add a separately hosted authoritative Node.js room server.
-
-1. Move match commands and snapshots behind a transport-neutral controller interface.
-2. Add lobby creation, room codes, ready states, reconnect tokens, and host migration policy.
-3. Run movement, bomb placement, blast propagation, damage, pickups, and win conditions on the server at a fixed tick.
-4. Send compact input commands from clients; interpolate remote champions and reconcile the local champion against server snapshots.
-5. Add latency simulation, disconnect recovery, duplicate-input protection, and server-side validation before public matchmaking.
-
-Colyseus or Socket.IO would both fit this architecture. Colyseus provides more room/state synchronization out of the box; Socket.IO offers a smaller transport layer with more custom game-state work.
+- Move LAN host authority into a dedicated always-on internet room server.
+- Add ready states, latency display, server-side input sequencing, host migration, and larger rooms.
+- Add public/private room discovery only after authentication and abuse controls are designed.

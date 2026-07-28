@@ -43,11 +43,11 @@ export class ExplosionSystem {
     for (const tile of tiles) {
       const w = this.grid.toWorld(tile);
       const isCenter = `${tile.x},${tile.y}` === centerKey;
-      const underlay = this.scene.add.rectangle(w.x, w.y, GAME_CONFIG.tileSize + 4, GAME_CONFIG.tileSize + 4, theme.blastColor, isCenter ? 0.4 : 0.26)
+      const underlay = this.scene.add.rectangle(w.x, w.y, this.grid.tileSize + 4, this.grid.tileSize + 4, theme.blastColor, isCenter ? 0.4 : 0.26)
         .setStrokeStyle(2, theme.coreColor, 0.75);
       this.effectLayer.add(underlay);
       const sprite = this.scene.add.image(w.x, w.y, theme.explosionTexture).setAlpha(0.98);
-      sprite.setDisplaySize(GAME_CONFIG.tileSize + 6, GAME_CONFIG.tileSize + 6);
+      sprite.setDisplaySize(this.grid.tileSize + 6, this.grid.tileSize + 6);
       this.effectLayer.add(sprite);
       const horizontal = center ? tile.y === center.y : true;
       const beam = this.scene.add.rectangle(
@@ -96,16 +96,16 @@ export class ExplosionSystem {
       const zone = this.scene.add.rectangle(
         0,
         0,
-        GAME_CONFIG.tileSize - 5,
-        GAME_CONFIG.tileSize - 5,
+        this.grid.tileSize - 5,
+        this.grid.tileSize - 5,
         theme.blastColor,
         Math.max(alpha * 0.7, 0.18)
       ).setStrokeStyle(isCenter ? 4 : 3, theme.coreColor, 0.96);
       const inner = this.scene.add.rectangle(
         0,
         0,
-        GAME_CONFIG.tileSize - 15,
-        GAME_CONFIG.tileSize - 15,
+        this.grid.tileSize - 15,
+        this.grid.tileSize - 15,
         0x080810,
         0.26
       ).setStrokeStyle(1, theme.coreColor, 0.48);

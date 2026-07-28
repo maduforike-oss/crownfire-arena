@@ -3,6 +3,7 @@ import { CHARACTERS } from '../config/Characters';
 import { SESSION } from '../config/GameConfig';
 import { ChampionCard } from '../ui/ChampionCard';
 import { menuButton } from '../ui/MenuButton';
+import { NetworkSession } from '../network/NetworkSession';
 import { addPanel, addSceneBackdrop, addScreenTitle, addSectionLabel } from '../ui/ScenePresentation';
 import { getCharacter } from '../config/Characters';
 
@@ -42,7 +43,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       });
     });
 
-    menuButton(this, 720, 656, 'Back', () => this.scene.start('MainMenuScene'), false, 240);
+    menuButton(this, 720, 656, 'Back', () => this.scene.start(NetworkSession.get().active ? 'MultiplayerLobbyScene' : 'MainMenuScene'), false, 240);
     menuButton(this, 1006, 656, 'Continue', () => this.scene.start('ModeSelectScene'), false, 240);
   }
 }
