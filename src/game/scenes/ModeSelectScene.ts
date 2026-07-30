@@ -13,7 +13,7 @@ export class ModeSelectScene extends Phaser.Scene {
   create(): void {
     const network = NetworkSession.get();
     addSceneBackdrop(this, { theme: 'moonfang', alternateTheme: 'hollowmoon', imageAlpha: 0.72, veilAlpha: 0.42 });
-    addScreenTitle(this, 'Select Trial', 'CHOOSE THE LAW OF THIS CROWNFIRE MATCH', 0x9dc8ff);
+    addScreenTitle(this, 'Select Trial', 'CHOOSE THE LAW OF THIS CROWDFIRE MATCH', 0x9dc8ff);
     addPanel(this, 640, 350, 760, 470, 0x9dc8ff, 0.88);
 
     MODES.forEach((mode, index) => {
@@ -39,7 +39,7 @@ export class ModeSelectScene extends Phaser.Scene {
           color: '#f7d783'
         });
       }
-      const selectable = mode.implemented && (!network.active || mode.id === 'classic' || mode.id === 'shards');
+      const selectable = mode.implemented && (!network.active || mode.id === 'grand');
       if (selectable) {
         this.add.zone(640, y, 700, 46)
           .setInteractive({ useHandCursor: true })
@@ -53,7 +53,9 @@ export class ModeSelectScene extends Phaser.Scene {
 
     const playersY = 526;
     this.add.rectangle(640, playersY, 700, 48, 0x17151d, 0.94).setStrokeStyle(1, 0xd8a84e, 0.6);
-    this.add.text(316, playersY - 12, network.active ? 'SAME-WIFI CHAMPIONS  2' : `LOCAL CHAMPIONS  ${SESSION.localPlayers}`, {
+    this.add.text(316, playersY - 12, network.active
+      ? `ONLINE RUMBLE  ${network.connectedPeers}/4 HUMAN`
+      : `PLAYERS  ${SESSION.localPlayers}     AI  ${SESSION.botDifficulty.toUpperCase()}`, {
       fontFamily: 'Arial',
       fontStyle: 'bold',
       fontSize: '15px',
@@ -63,7 +65,7 @@ export class ModeSelectScene extends Phaser.Scene {
       610,
       playersY - 10,
       network.active
-        ? `ROOM ${network.room}  |  host configures, guest stays connected`
+        ? `ROOM ${network.room}  |  open seats become arena bots`
         : SESSION.mode === 'sandbox'
         ? 'Sandbox uses one champion and a resilient practice rival.'
         : SESSION.localPlayers === 2
@@ -75,11 +77,19 @@ export class ModeSelectScene extends Phaser.Scene {
         color: '#b5a995'
       }
     );
-    this.add.zone(640, playersY, 700, 48)
+    this.add.zone(470, playersY, 350, 48)
       .setInteractive({ useHandCursor: !network.active && SESSION.mode !== 'sandbox' })
       .on('pointerdown', () => {
         if (network.active || SESSION.mode === 'sandbox') return;
         SESSION.localPlayers = SESSION.localPlayers === 1 ? 2 : 1;
+        this.scene.restart();
+      });
+    this.add.zone(810, playersY, 330, 48)
+      .setInteractive({ useHandCursor: !network.active && SESSION.mode !== 'sandbox' })
+      .on('pointerdown', () => {
+        if (network.active || SESSION.mode === 'sandbox') return;
+        const difficulties = ['easy', 'normal', 'hard'] as const;
+        SESSION.botDifficulty = difficulties[(difficulties.indexOf(SESSION.botDifficulty) + 1) % difficulties.length];
         this.scene.restart();
       });
 

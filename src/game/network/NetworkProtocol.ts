@@ -6,8 +6,15 @@ import type {
   PowerUpType,
   Stats
 } from '../utils/types';
+import type {
+  OnlineRoomSeat,
+  OnlineRoomState,
+  OnlineRumbleConfig,
+  SocialMatchRecord,
+  SocialProfile
+} from '../social/SocialTypes';
 
-export type NetworkRole = 'host' | 'guest';
+export type NetworkRole = 'host' | 'player' | 'spectator';
 export type NetworkConnectionStatus = 'offline' | 'connecting' | 'connected' | 'reconnecting' | 'lost';
 
 export interface NetworkInputState {
@@ -34,7 +41,7 @@ export interface NetworkActorSnapshot {
   frostTrailMs: number;
   specialCooldownMs: number;
   lastDir: GridPosition;
-  humanSlot: 'host' | 'guest' | 'bot';
+  humanSlot: string | 'bot';
 }
 
 export interface NetworkBombSnapshot {
@@ -70,9 +77,12 @@ export interface NetworkMatchSnapshot {
 
 export interface NetworkMatchConfig {
   map: string;
-  mode: 'classic' | 'shards';
-  hostCharacter: CharacterClass;
-  guestCharacter: CharacterClass;
+  mode: 'classic' | 'shards' | 'grand';
+  hostCharacter?: CharacterClass;
+  guestCharacter?: CharacterClass;
+  matchId?: string;
+  roomCode?: string;
+  players?: OnlineRoomSeat[];
 }
 
 export type NetworkGameplayPayload =
@@ -84,3 +94,36 @@ export type NetworkGameplayPayload =
   | { kind: 'matchEnd'; winnerId?: string; reason: string }
   | { kind: 'restart' }
   | { kind: 'pause'; paused: boolean };
+
+export interface NetworkGameplayEnvelope {
+  payload: NetworkGameplayPayload;
+  fromProfileId?: string;
+  fromSeat?: number;
+}
+
+export interface OnlineRoomMessage {
+  type: 'room';
+  room: OnlineRoomState;
+  yourSeat?: number;
+  spectator: boolean;
+}
+
+export type OnlineServerMessage =
+  | { type: 'welcome'; profile: SocialProfile; reconnectToken: string }
+  | OnlineRoomMessage
+  | { type: 'start'; config: OnlineRumbleConfig }
+  | { type: 'relay'; fromProfileId: string; fromSeat?: number; payload: NetworkGameplayPayload }
+  | { type: 'match-recorded'; matchId: string }
+  | { type: 'error'; code: string; message: string };
+
+export type OnlineClientMessage =
+  | { type: 'hello'; sessionToken: string; reconnectToken?: string }
+  | { type: 'create-room'; character: CharacterClass }
+  | { type: 'join-room'; room: string; character: CharacterClass; spectator?: boolean }
+  | { type: 'loadout'; character: CharacterClass }
+  | { type: 'ready'; ready: boolean }
+  | { type: 'start'; map: string }
+  | { type: 'relay'; payload: NetworkGameplayPayload }
+  | { type: 'match-result'; result: Omit<SocialMatchRecord, 'opponents'> }
+  | { type: 'rematch-vote' }
+  | { type: 'leave-room' };

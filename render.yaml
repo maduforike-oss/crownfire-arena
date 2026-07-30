@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: crowdfire-social
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crowdfire-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://maduforike-oss.github.io
+      - key: CLIENT_ORIGIN
+        value: https://maduforike-oss.github.io/crownfire-arena
+
+databases:
+  - name: crowdfire-db
+    databaseName: crowdfire
+    user: crowdfire
+    plan: free

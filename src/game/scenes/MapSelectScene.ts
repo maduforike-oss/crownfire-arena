@@ -75,12 +75,18 @@ export class MapSelectScene extends Phaser.Scene {
         SESSION.map = map.id;
         const network = NetworkSession.get();
         if (network.active && network.role === 'host') {
+          const onStart = (event: Event): void => {
+            const config = (event as CustomEvent<import('../network/NetworkProtocol').NetworkMatchConfig>).detail;
+            SESSION.map = config.map;
+            SESSION.mode = 'grand';
+            this.scene.start('GameScene');
+          };
+          network.addEventListener('start', onStart, { once: true });
           network.startMatch({
             map: map.id,
-            mode: SESSION.mode === 'shards' ? 'shards' : 'classic',
-            hostCharacter: SESSION.character,
-            guestCharacter: network.remoteCharacter
+            mode: 'grand'
           });
+          return;
         }
         this.scene.start('GameScene');
       });

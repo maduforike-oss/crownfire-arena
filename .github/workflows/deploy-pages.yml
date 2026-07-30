@@ -1,4 +1,4 @@
-name: Deploy Crownfire Arena
+name: Deploy Crowdfire Arena
 
 on:
   push:
@@ -24,7 +24,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run check
       - run: npm run build
+        env:
+          VITE_CROWDFIRE_SERVICE_URL: ${{ vars.CROWDFIRE_SERVICE_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

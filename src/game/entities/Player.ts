@@ -5,6 +5,10 @@ export class Player {
   alive = true;
   invulnerableMs = 0;
   kills = 0;
+  deaths = 0;
+  bombsPlaced = 0;
+  runesCollected = 0;
+  defeatedAtMs?: number;
   shards = 0;
   slowedMs = 0;
   snaredMs = 0;

@@ -12,6 +12,7 @@ import { ResultsScene } from './game/scenes/ResultsScene';
 import { PowerUpGuideScene } from './game/scenes/PowerUpGuideScene';
 import { ControllerSetupScene } from './game/scenes/ControllerSetupScene';
 import { MultiplayerLobbyScene } from './game/scenes/MultiplayerLobbyScene';
+import { SocialHubScene } from './game/scenes/SocialHubScene';
 import { registerServiceWorker } from './game/systems/PWAInstall';
 import { installDevicePresentation } from './game/systems/DeviceProfile';
 
@@ -47,6 +48,7 @@ new Phaser.Game({
     MapSelectScene,
     PowerUpGuideScene,
     ControllerSetupScene,
+    SocialHubScene,
     MultiplayerLobbyScene,
     GameScene,
     ResultsScene

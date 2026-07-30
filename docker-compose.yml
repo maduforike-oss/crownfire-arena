@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crowdfire
+      POSTGRES_USER: crowdfire
+      POSTGRES_PASSWORD: crowdfire-local
+    ports:
+      - "5432:5432"
+    volumes:
+      - crowdfire-data:/var/lib/postgresql/data
+
+  social:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      PORT: 8787
+      DATABASE_URL: postgresql://crowdfire:crowdfire-local@postgres:5432/crowdfire
+      CORS_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+      SESSION_SECRET: local-development-secret-change-me
+    ports:
+      - "8787:8787"
+    depends_on:
+      - postgres
+
+volumes:
+  crowdfire-data:

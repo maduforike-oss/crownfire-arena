@@ -38,6 +38,7 @@ export class CharacterSelectScene extends Phaser.Scene {
         height: 96,
         onClick: () => {
           SESSION.character = character.id;
+          NetworkSession.get().updateLoadout(character.id);
           this.scene.restart();
         }
       });

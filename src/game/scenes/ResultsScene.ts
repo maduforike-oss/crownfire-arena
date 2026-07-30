@@ -36,7 +36,7 @@ export class ResultsScene extends Phaser.Scene {
     AudioSystem.get().startMusic(d.menuOnly ? 'menu' : 'results', SESSION.map);
     addSceneBackdrop(this, { theme: d.won ? 'ashen' : 'hollowmoon', alternateTheme: SESSION.map as 'ashen' | 'moonfang' | 'frostkeep' | 'hollowmoon', imageAlpha: 0.52, veilAlpha: d.menuOnly ? 0.7 : 0.54 });
     addPanel(this, 640, 386, 760, 470, d.won ? 0xd8a84e : 0x8f3e46, 0.95);
-    addScreenTitle(this, d.title ?? (d.won ? 'Crown Claimed' : 'Champion Fallen'), d.menuOnly ? 'THE LAWS OF THE CROWNFIRE TRIAL' : d.won ? 'THE FALLEN CROWN ANSWERS TO YOU' : 'THE ARENA REMEMBERS EVERY DEFEAT', d.won ? 0xd8a84e : 0x8f3e46);
+    addScreenTitle(this, d.title ?? (d.won ? 'Crown Claimed' : 'Champion Fallen'), d.menuOnly ? 'THE LAWS OF THE CROWDFIRE TRIAL' : d.won ? 'THE FALLEN CROWN ANSWERS TO YOU' : 'THE ARENA REMEMBERS EVERY DEFEAT', d.won ? 0xd8a84e : 0x8f3e46);
     if (!d.menuOnly) {
       const character = getCharacter(SESSION.character);
       const portrait = this.add.image(380, 375, character.assetKey).setDisplaySize(260, 260);
@@ -63,15 +63,21 @@ export class ResultsScene extends Phaser.Scene {
         color: '#9ec8ff'
       }).setOrigin(0.5);
     }
-    const restartLabel = !d.menuOnly && network.active && network.role === 'guest' ? 'Waiting for Host' : d.menuOnly ? 'Back' : 'Restart Trial';
+    const restartLabel = d.menuOnly ? 'Back' : network.active ? 'Run It Back' : 'Restart Trial';
     menuButton(this, contentX, 500, restartLabel, () => {
       if (d.menuOnly) {
         this.scene.start('MainMenuScene');
       } else if (!network.active) {
         this.scene.start('GameScene');
-      } else if (network.role === 'host' && network.matchConfig) {
-        network.startMatch(network.matchConfig);
-        this.scene.start('GameScene');
+      } else {
+        network.voteRematch();
+        const notice = this.add.text(contentX, 614, 'REMATCH VOTE CAST • WAITING FOR RIVALS', {
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+          fontSize: '12px',
+          color: '#9ec8ff'
+        }).setOrigin(0.5);
+        this.time.delayedCall(5000, () => notice.destroy());
       }
     }, false, 300);
     if (!d.menuOnly) {
@@ -90,7 +96,8 @@ export class ResultsScene extends Phaser.Scene {
     const config = (event as CustomEvent<NetworkMatchConfig>).detail;
     SESSION.map = config.map;
     SESSION.mode = config.mode;
-    SESSION.character = NetworkSession.get().role === 'guest' ? config.guestCharacter : config.hostCharacter;
+    SESSION.character = config.players?.find((seat) => seat.profileId === NetworkSession.get().clientId)?.character
+      ?? SESSION.character;
     this.scene.start('GameScene');
   };
 }

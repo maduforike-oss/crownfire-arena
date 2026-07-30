@@ -13,10 +13,12 @@ export const SESSION = {
   character: 'dragon',
   mode: 'classic',
   map: 'ashen',
-  localPlayers: 1
+  localPlayers: 1,
+  botDifficulty: 'normal'
 } as {
   character: import('../utils/types').CharacterClass;
   mode: import('../utils/types').GameMode;
   map: string;
   localPlayers: 1 | 2;
+  botDifficulty: import('../utils/types').BotDifficulty;
 };

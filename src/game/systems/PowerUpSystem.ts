@@ -6,18 +6,29 @@ import type { Player } from '../entities/Player';
 import type { GridSystem } from './GridSystem';
 import { choice, dirs, distance, keyOf, sameTile } from '../utils/math';
 
+export interface PowerUpBudget {
+  dropChance?: number;
+  maxActive?: number;
+  minDistance?: number;
+}
+
 export class PowerUpSystem {
   readonly powerUps: PowerUp[] = [];
   private nextId = 1;
-  private readonly maxActive = 12;
-  private readonly minDistance = 3;
+  private readonly maxActive: number;
+  private readonly minDistance: number;
+  private readonly dropChance: number;
 
-  constructor(private readonly grid?: GridSystem) {}
+  constructor(private readonly grid?: GridSystem, budget: PowerUpBudget = {}) {
+    this.maxActive = budget.maxActive ?? 12;
+    this.minDistance = budget.minDistance ?? 3;
+    this.dropChance = budget.dropChance ?? GAME_CONFIG.dropChance;
+  }
 
   maybeDrop(pos: GridPosition, forceShard: boolean): PowerUp | undefined {
     if (forceShard || this.powerUps.length >= this.maxActive) return undefined;
     if (this.grid && this.grid.spawnReserved.has(keyOf(pos))) return undefined;
-    const chance = this.scoreTile(pos) >= 2 ? GAME_CONFIG.dropChance : GAME_CONFIG.dropChance * 0.55;
+    const chance = this.scoreTile(pos) >= 2 ? this.dropChance : this.dropChance * 0.55;
     if (Math.random() > chance) return undefined;
     return this.spawn(pos, this.weightedType());
   }

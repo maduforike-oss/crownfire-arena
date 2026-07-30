@@ -1,6 +1,8 @@
 node_modules/
 dist/
+server-dist/
 .vite/
+.env
 *.zip
 *.log
 .DS_Store

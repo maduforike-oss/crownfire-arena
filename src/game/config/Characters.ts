@@ -138,10 +138,10 @@ export const CHARACTERS: CharacterDef[] = [
     bombVisualThemeId: 'shadow',
     accentColor: 0xd0a06a,
     description: 'decoys and misdirection',
-    passiveText: 'mirror shade prototype',
+    passiveText: 'swift shadow step',
     specialName: 'Mirror Shade',
     stats: { moveSpeed: 156 },
-    implemented: false,
+    implemented: true,
     apply: (s) => {
       s.moveSpeed += 8;
     }
@@ -158,7 +158,7 @@ export const CHARACTERS: CharacterDef[] = [
     passiveText: '+1 health, slower speed',
     specialName: 'Stoneguard Shield',
     stats: { health: 4, maxHealth: 4, moveSpeed: 134 },
-    implemented: false,
+    implemented: true,
     apply: (s) => {
       s.health += 1;
       s.maxHealth += 1;
@@ -174,10 +174,10 @@ export const CHARACTERS: CharacterDef[] = [
     bombVisualThemeId: 'raven',
     accentColor: 0xb394ff,
     description: 'prophecy and blink magic',
-    passiveText: 'blink prototype',
+    passiveText: 'rune-sight blink',
     specialName: 'Raven Blink',
     stats: {},
-    implemented: false,
+    implemented: true,
     apply: () => {}
   }),
   character({
@@ -189,10 +189,10 @@ export const CHARACTERS: CharacterDef[] = [
     bombVisualThemeId: 'beast',
     accentColor: 0x8bd56f,
     description: 'wild mythical beasts',
-    passiveText: 'companion prototype',
+    passiveText: 'wild spirit bond',
     specialName: 'Beast Call',
     stats: {},
-    implemented: false,
+    implemented: true,
     apply: () => {}
   })
 ];

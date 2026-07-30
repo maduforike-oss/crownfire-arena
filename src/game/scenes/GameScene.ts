@@ -32,6 +32,7 @@ import { menuButton } from '../ui/MenuButton';
 import { DragonBlastVfxSystem } from '../systems/DragonBlastVfxSystem';
 import { NetworkSession } from '../network/NetworkSession';
 import type {
+  NetworkGameplayEnvelope,
   NetworkGameplayPayload,
   NetworkInputState,
   NetworkMatchSnapshot
@@ -48,7 +49,7 @@ export class GameScene extends Phaser.Scene {
   private human!: HumanController;
   private human2?: HumanController;
   private touch?: TouchController;
-  private ai = new AIController();
+  private ai!: AIController;
   private animation!: AnimationSystem;
   private explosionFx!: ExplosionSystem;
   private dragonBlastFx!: DragonBlastVfxSystem;
@@ -80,14 +81,7 @@ export class GameScene extends Phaser.Scene {
   private sandboxPanel?: Phaser.GameObjects.Container;
   private sandboxLauncher?: Phaser.GameObjects.Container;
   private readonly network = NetworkSession.get();
-  private remoteInput: NetworkInputState = {
-    direction: 'none',
-    bomb: false,
-    special: false,
-    remote: false,
-    pause: false,
-    sequence: 0
-  };
+  private remoteInputs = new Map<string, NetworkInputState>();
   private networkSnapshotMs = 0;
   private networkInputMs = 0;
   private networkInputSequence = 0;
@@ -112,9 +106,12 @@ export class GameScene extends Phaser.Scene {
     this.grid = new GridSystem(map);
     this.shrineTile = { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
     this.bombs = new BombSystem(this.grid);
-    this.powers = new PowerUpSystem(this.grid);
+    this.powers = new PowerUpSystem(this.grid, SESSION.mode === 'grand'
+      ? { dropChance: 0.4, maxActive: 16, minDistance: 2.5 }
+      : undefined);
     this.danger = new DangerMapSystem();
     this.mode = new ModeSystem(SESSION.mode);
+    this.ai = new AIController(this.network.active || SESSION.mode === 'grand' ? 'hard' : SESSION.botDifficulty);
     this.human = new HumanController(this, 'wasd');
     this.touch = new TouchController(this, this.device);
     this.human2 = SESSION.localPlayers === 2 ? new HumanController(this, 'arrows') : undefined;
@@ -131,7 +128,11 @@ export class GameScene extends Phaser.Scene {
     this.dragonBlastFx = new DragonBlastVfxSystem(this, this.grid, this.effectLayer);
     this.bombViews = new BombViewSystem(this, this.grid, this.objectLayer, this.explosionFx);
     this.drawArena();
-    this.powers.seedInitial(SESSION.mode === 'sandbox' ? 0 : SESSION.mode === 'classic' ? 5 : 7);
+    this.powers.seedInitial(
+      SESSION.mode === 'sandbox' ? 0
+        : SESSION.mode === 'grand' ? 10
+          : SESSION.mode === 'classic' ? 5 : 7
+    );
     this.spawnActors();
     this.hud = new HUD(this);
     this.hud.create(modeDef, this.device.compactHud);
@@ -148,7 +149,7 @@ export class GameScene extends Phaser.Scene {
   update(_: number, delta: number): void {
     if (this.ended) return;
     const pausePressed = this.human.consumePause() || this.touch?.consumePause();
-    if (this.network.active && this.network.role === 'guest') {
+    if (this.network.active && this.network.role !== 'host') {
       if (pausePressed) this.sendGuestInput('none', false, false, false, true);
       if (!this.paused) this.updateNetworkGuest(Math.min(delta, 34));
       return;
@@ -187,7 +188,7 @@ export class GameScene extends Phaser.Scene {
     this.network.addEventListener('game', this.onNetworkGame);
     this.network.addEventListener('status', this.onNetworkStatus);
     this.network.addEventListener('lost', this.onNetworkLost);
-    this.networkStatusText = this.add.text(640, 704, `LAN ${this.network.room}  |  ${this.network.role?.toUpperCase()}`, {
+    this.networkStatusText = this.add.text(640, 704, `RUMBLE ${this.network.room}  |  ${this.network.role?.toUpperCase()}`, {
       fontFamily: 'Arial',
       fontStyle: 'bold',
       fontSize: '11px',
@@ -196,15 +197,18 @@ export class GameScene extends Phaser.Scene {
       strokeThickness: 3
     }).setOrigin(0.5, 1).setDepth(190);
     this.uiLayer.add(this.networkStatusText);
-    this.network.send({ kind: 'profile', character: this.player.character });
   }
 
   private readonly onNetworkGame = (event: Event): void => {
-    const payload = (event as CustomEvent<NetworkGameplayPayload>).detail;
+    const envelope = (event as CustomEvent<NetworkGameplayEnvelope>).detail;
+    const payload = envelope.payload;
     if (this.network.role === 'host') {
       if (payload.kind !== 'input') return;
-      if (payload.input.sequence <= this.remoteInput.sequence) return;
-      this.remoteInput = payload.input;
+      const sender = envelope.fromProfileId;
+      if (!sender) return;
+      const previous = this.remoteInputs.get(sender);
+      if (previous && payload.input.sequence <= previous.sequence) return;
+      this.remoteInputs.set(sender, payload.input);
       if (payload.input.pause) this.togglePause();
       return;
     }
@@ -229,8 +233,8 @@ export class GameScene extends Phaser.Scene {
     const status = (event as CustomEvent<string>).detail;
     this.networkStatusText?.setText(
       status === 'reconnecting'
-        ? `LAN ${this.network.room}  |  RECONNECTING...`
-        : `LAN ${this.network.room}  |  ${status.toUpperCase()}`
+        ? `RUMBLE ${this.network.room}  |  RECONNECTING...`
+        : `RUMBLE ${this.network.room}  |  ${status.toUpperCase()}`
     );
     this.networkStatusText?.setColor(status === 'reconnecting' ? '#f7d783' : '#9dc8ff');
   };
@@ -238,7 +242,7 @@ export class GameScene extends Phaser.Scene {
   private readonly onNetworkLost = (): void => {
     if (this.ended) return;
     this.ended = true;
-    const notice = this.add.text(640, 360, 'LAN connection lost\nReturning to a fresh room...', {
+    const notice = this.add.text(640, 360, 'Rumble connection lost\nReturning to the online hall...', {
       fontFamily: 'Georgia',
       fontSize: '28px',
       align: 'center',
@@ -254,6 +258,13 @@ export class GameScene extends Phaser.Scene {
   };
 
   private updateNetworkGuest(dt: number): void {
+    if (this.network.role === 'spectator') {
+      this.syncSprites();
+      this.updateFrostZones(0);
+      this.updateShrineVisual();
+      this.hud.update(this.player, this.actors.filter((actor) => actor !== this.player && actor.alive).length, this.mode.elapsedMs);
+      return;
+    }
     this.networkInputMs += dt;
     this.touch?.setRemoteAvailable(this.player.stats.remoteArmedBombs);
     const touchDirection = this.touch?.direction() ?? 'none';
@@ -293,21 +304,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateNetworkRemote(dt: number): void {
-    const remote = this.actors.find((actor) => actor.id === 'network-guest');
-    if (!remote) return;
-    this.moveActor(remote, this.remoteInput.direction, dt);
-    if (this.remoteInput.bomb) {
-      this.placeBomb(remote);
-      this.remoteInput.bomb = false;
-    }
-    if (this.remoteInput.special) {
-      this.useSpecial(remote);
-      this.remoteInput.special = false;
-    }
-    if (this.remoteInput.remote) {
-      const explosions = this.bombs.detonateRemote(remote.id, this.actors);
-      for (const explosion of explosions) this.resolveExplosion(explosion);
-      this.remoteInput.remote = false;
+    for (const [profileId, input] of this.remoteInputs) {
+      if (profileId === this.network.clientId) continue;
+      const remote = this.actors.find((actor) => actor.id === `online-${profileId}`);
+      if (!remote || !remote.alive) continue;
+      this.moveActor(remote, input.direction, dt);
+      if (input.bomb) {
+        this.placeBomb(remote);
+        input.bomb = false;
+      }
+      if (input.special) {
+        this.useSpecial(remote);
+        input.special = false;
+      }
+      if (input.remote) {
+        const explosions = this.bombs.detonateRemote(remote.id, this.actors);
+        for (const explosion of explosions) this.resolveExplosion(explosion);
+        input.remote = false;
+      }
     }
   }
 
@@ -332,7 +346,7 @@ export class GameScene extends Phaser.Scene {
         frostTrailMs: actor.frostTrailMs,
         specialCooldownMs: actor.specialCooldownMs,
         lastDir: { ...actor.lastDir },
-        humanSlot: actor.id === 'player' ? 'host' : actor.id === 'network-guest' ? 'guest' : 'bot'
+        humanSlot: actor.id.startsWith('online-') ? actor.id.slice('online-'.length) : 'bot'
       })),
       bombs: this.bombs.bombs.map((bomb) => ({
         id: bomb.id,
@@ -460,13 +474,55 @@ export class GameScene extends Phaser.Scene {
     }
     const living = this.actors.filter((actor) => actor.alive);
     if (living.length <= 1) {
-      this.endNetworkMatch(living[0]?.id, living[0] ? `${living[0].name} claimed the LAN trial.` : 'No champion survived the rune war.');
+      this.endNetworkMatch(living[0]?.id, living[0] ? `${living[0].name} claimed the Rumble.` : 'No champion survived the rune war.');
     }
   }
 
   private endNetworkMatch(winnerId: string | undefined, reason: string): void {
     this.network.send({ kind: 'matchEnd', winnerId, reason });
+    this.reportOnlineMatch(winnerId, reason);
     this.finish(winnerId === this.player.id, reason);
+  }
+
+  private reportOnlineMatch(winnerId: string | undefined, reason: string): void {
+    const config = this.network.matchConfig;
+    if (this.network.role !== 'host' || !config?.matchId) return;
+    const ranked = [...this.actors].sort((a, b) => {
+      if (a.alive !== b.alive) return a.alive ? -1 : 1;
+      return (b.defeatedAtMs ?? Number.MAX_SAFE_INTEGER) - (a.defeatedAtMs ?? Number.MAX_SAFE_INTEGER);
+    });
+    this.network.reportMatch({
+      id: config.matchId,
+      roomCode: config.roomCode ?? this.network.room,
+      map: SESSION.map,
+      mode: SESSION.mode,
+      reason,
+      winnerProfileId: winnerId?.startsWith('online-') ? winnerId.slice('online-'.length) : undefined,
+      startedAt: new Date(Date.now() - this.mode.elapsedMs).toISOString(),
+      endedAt: new Date().toISOString(),
+      participants: ranked.map((actor, index) => ({
+        profileId: actor.id.startsWith('online-') ? actor.id.slice('online-'.length) : undefined,
+        seat: this.actorSeat(actor.id),
+        displayName: actor.name,
+        character: actor.character,
+        placement: index + 1,
+        kills: actor.kills,
+        deaths: actor.deaths,
+        bombsPlaced: actor.bombsPlaced,
+        runesCollected: actor.runesCollected,
+        shards: actor.shards,
+        survivalMs: actor.defeatedAtMs ?? this.mode.elapsedMs,
+        won: actor.id === winnerId
+      }))
+    });
+  }
+
+  private actorSeat(actorId: string): number {
+    const profileId = actorId.startsWith('online-') ? actorId.slice('online-'.length) : undefined;
+    const configured = this.network.matchConfig?.players?.find((seat) =>
+      profileId ? seat.profileId === profileId : `bot-${seat.seat}` === actorId
+    );
+    return configured?.seat ?? 0;
   }
 
   private setGuestNetworkPaused(paused: boolean): void {
@@ -504,6 +560,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnActors(): void {
+    if (this.network.active && this.network.matchConfig?.players?.length) {
+      const ordered = [...this.network.matchConfig.players].sort((a, b) => a.seat - b.seat);
+      this.actors = ordered.map((seat) => {
+        const definition = CHARACTERS.find((character) => character.id === seat.character) ?? CHARACTERS[0];
+        const spawn = this.grid.map.spawns[seat.seat] ?? this.grid.map.spawns[0];
+        const id = seat.bot ? `bot-${seat.seat}` : `online-${seat.profileId}`;
+        if (seat.bot) {
+          const bot = new Bot(
+            id,
+            seat.displayName,
+            definition.id,
+            { ...spawn },
+            this.grid.toWorld(spawn),
+            makeStats(definition.id),
+            false,
+            definition.palette,
+            definition.accent
+          );
+          bot.stats.health = 2;
+          bot.stats.maxHealth = 2;
+          return bot;
+        }
+        return new Player(
+          id,
+          seat.displayName,
+          definition.id,
+          { ...spawn },
+          this.grid.toWorld(spawn),
+          makeStats(definition.id),
+          seat.profileId === this.network.clientId,
+          definition.palette,
+          definition.accent
+        );
+      });
+      this.player = this.actors.find((actor) => actor.id === `online-${this.network.clientId}`)
+        ?? this.actors[0];
+      for (const actor of this.actors) this.makeActorView(actor);
+      return;
+    }
     const hostCharacter = this.network.active
       ? this.network.matchConfig?.hostCharacter ?? SESSION.character
       : SESSION.character;
@@ -554,12 +649,12 @@ export class GameScene extends Phaser.Scene {
         { ...guestSpawn },
         this.grid.toWorld(guestSpawn),
         makeStats(guestDef.id),
-        this.network.role === 'guest',
+        this.network.role === 'player',
         guestDef.palette,
         guestDef.accent
       );
       this.actors.push(guest);
-      if (this.network.role === 'guest') this.player = guest;
+      if (this.network.role === 'player') this.player = guest;
       const botDefs = ['frost', 'veil'] as const;
       for (let i = 2; i < 4; i += 1) {
         const botDef = CHARACTERS.find((character) => character.id === botDefs[i - 2]) ?? CHARACTERS[0];
@@ -658,7 +753,7 @@ export class GameScene extends Phaser.Scene {
       let intent: BotIntent = { dir: 'none' as Direction, placeBomb: false };
       if (bot.thinkMs <= 0 || distance(bot.grid, this.player.grid) < 4) {
         intent = this.ai.think(bot, this.actors.filter((actor) => actor !== bot && actor.alive), this.grid, this.bombs, this.danger, this.powers);
-        bot.thinkMs = 120 + Math.random() * 120;
+        bot.thinkMs = this.ai.reactionDelay();
       }
       // Resolve the tactical decision first: Dragon/Frost must arm the bomb
       // being placed this tick, then immediately start the planned escape.
@@ -702,6 +797,7 @@ export class GameScene extends Phaser.Scene {
   private placeBomb(actor: Player): void {
     const bomb = this.bombs.place(actor);
     if (!bomb) return;
+    actor.bombsPlaced += 1;
     AudioSystem.get().sfx('bomb');
     const theme = getBombTheme(bomb.themeId);
     const w = this.grid.toWorld(bomb.grid);
@@ -787,8 +883,10 @@ export class GameScene extends Phaser.Scene {
     if (view) this.animation.playDamaged(actor, view);
     this.floatText(actor.world.x, actor.world.y - 42, '-1', '#ff7b74');
     AudioSystem.get().sfx('damage');
-    if (actor.stats.health <= 0) {
+      if (actor.stats.health <= 0) {
       actor.alive = false;
+      actor.deaths += 1;
+      actor.defeatedAtMs = this.mode.elapsedMs;
       if (view) this.animation.playDefeated(actor, view);
       const killer = this.actors.find((a) => a.id === ownerId);
       if (killer && killer !== actor) killer.kills += 1;
@@ -802,6 +900,7 @@ export class GameScene extends Phaser.Scene {
       if (pickup) {
       actor.lastPowerUp = pickup.type;
       actor.lastPowerUpMs = 4200;
+      actor.runesCollected += 1;
       this.applyPowerUpFeedback(actor, pickup.type, pickup.label);
       if (actor.isHuman) this.pulseHudForPower(pickup.type);
         this.floatPickup(actor.world.x, actor.world.y - 50, pickup.type, pickup.label);
@@ -1560,6 +1659,7 @@ export class GameScene extends Phaser.Scene {
     this.lastReceivedSnapshotSequence = 0;
     this.lastNetworkDirection = 'none';
     this.networkStatusText = undefined;
+    this.remoteInputs.clear();
   }
 
   private shutdown(): void {

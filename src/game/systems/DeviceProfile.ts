@@ -48,6 +48,7 @@ export function refreshDevicePresentation(): DeviceProfile {
   body.classList.toggle('device-tablet', profile.tablet);
   body.classList.toggle('device-landscape', profile.landscape);
   body.classList.toggle('touch-match', matchPresentation && profile.touch);
+  alignPhaserDomOverlay();
   return profile;
 }
 
@@ -55,9 +56,30 @@ export function installDevicePresentation(): void {
   refreshDevicePresentation();
   window.addEventListener('resize', refreshDevicePresentation);
   window.visualViewport?.addEventListener('resize', refreshDevicePresentation);
+  const game = document.getElementById('game');
+  if (game) {
+    new MutationObserver(() => alignPhaserDomOverlay())
+      .observe(game, { childList: true, subtree: true });
+  }
 }
 
 export function setMatchPresentation(enabled: boolean): DeviceProfile {
   matchPresentation = enabled;
   return refreshDevicePresentation();
+}
+
+export function alignPhaserDomOverlay(): void {
+  window.requestAnimationFrame(() => {
+    const game = document.getElementById('game');
+    const canvas = game?.querySelector('canvas');
+    if (!game || !canvas) return;
+    const canvasBounds = canvas.getBoundingClientRect();
+    for (const child of [...game.children]) {
+      if (!(child instanceof HTMLDivElement) || !child.querySelector('input')) continue;
+      child.style.left = `${canvasBounds.left - game.getBoundingClientRect().left}px`;
+      child.style.top = `${canvasBounds.top - game.getBoundingClientRect().top}px`;
+      child.style.margin = '0';
+      child.style.transformOrigin = 'left top';
+    }
+  });
 }

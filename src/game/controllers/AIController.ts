@@ -4,7 +4,7 @@ import type { GridSystem } from '../systems/GridSystem';
 import type { BombSystem } from '../systems/BombSystem';
 import type { DangerMapSystem } from '../systems/DangerMapSystem';
 import type { PowerUpSystem } from '../systems/PowerUpSystem';
-import type { Direction, GridPosition } from '../utils/types';
+import type { BotDifficulty, Direction, GridPosition } from '../utils/types';
 import { dirs, distance, keyOf, sameTile } from '../utils/math';
 
 export interface BotIntent {
@@ -22,6 +22,14 @@ const dirName = (from: GridPosition, to: GridPosition): Direction => {
 };
 
 export class AIController {
+  constructor(readonly difficulty: BotDifficulty = 'normal') {}
+
+  reactionDelay(): number {
+    if (this.difficulty === 'easy') return 300 + Math.random() * 220;
+    if (this.difficulty === 'hard') return 70 + Math.random() * 80;
+    return 120 + Math.random() * 120;
+  }
+
   think(bot: Bot, opponents: Player[], grid: GridSystem, bombs: BombSystem, danger: DangerMapSystem, powers: PowerUpSystem): BotIntent {
     if (!bot.alive) return { dir: 'none', placeBomb: false };
 
@@ -95,6 +103,7 @@ export class AIController {
 
   private shouldUseSpecial(bot: Bot, target: Player | undefined, escaping: boolean, settingBomb: boolean, danger: DangerMapSystem): boolean {
     if (bot.specialCooldownMs > 0) return false;
+    if (this.difficulty === 'easy' && Math.random() < 0.45) return false;
     const targetDistance = target ? distance(bot.grid, target.grid) : Infinity;
     switch (bot.character) {
       case 'dragon':

@@ -23,7 +23,7 @@ export class TouchController {
   constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
     this.visible = profile.touch || scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
     // Touch controls live in the presentation rails, never in world-space. This
-    // stays true for both the 15 x 13 arena and the wider Grand Expanse map.
+    // stays true for both the 15 x 13 arena and the wider Rumble map.
     const leftRailCenter = PRESENTATION.leftRailWidth / 2;
     const rightRailCenter = PRESENTATION.width - PRESENTATION.rightRailWidth / 2;
     this.stickCenter = { x: leftRailCenter, y: 590 };

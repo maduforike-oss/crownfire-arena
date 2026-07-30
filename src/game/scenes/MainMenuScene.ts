@@ -12,6 +12,11 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    const inviteRoom = new URLSearchParams(window.location.search).get('join');
+    if (inviteRoom) {
+      this.scene.start('MultiplayerLobbyScene');
+      return;
+    }
     AudioSystem.get().startMusic('menu');
     this.input.once('pointerdown', () => AudioSystem.get().startMusic('menu'));
     this.cameras.main.fadeIn(320, 0, 0, 0);
@@ -29,7 +34,7 @@ export class MainMenuScene extends Phaser.Scene {
       ease: 'Sine.inOut'
     });
 
-    this.add.text(640, 70, 'Crownfire Arena', {
+    this.add.text(640, 70, 'Crowdfire Arena', {
       fontFamily: 'Georgia, serif',
       fontSize: '52px',
       color: '#ffe39b',
@@ -48,15 +53,16 @@ export class MainMenuScene extends Phaser.Scene {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '14px', color: '#9ec8ff'
     }).setOrigin(0.5);
     menuButton(this, 640, 274, 'Enter the Arena', () => this.scene.start('CharacterSelectScene'), false, 338);
-    menuButton(this, 640, 336, 'Same-WiFi Arena', () => this.scene.start('MultiplayerLobbyScene'), false, 338);
-    menuButton(this, 640, 398, 'Rune Guide', () => this.scene.start('PowerUpGuideScene'), false, 338);
-    menuButton(this, 640, 460, 'How to Play', () => this.showHow(), false, 338);
-    menuButton(this, 640, 522, AudioSystem.get().isMuted() ? 'Audio Off' : 'Audio On', () => {
+    menuButton(this, 640, 336, 'Online Rumble', () => this.scene.start('MultiplayerLobbyScene'), false, 338);
+    menuButton(this, 640, 398, 'Rivalry Chronicle', () => this.scene.start('SocialHubScene'), false, 338);
+    menuButton(this, 640, 460, 'Rune Guide', () => this.scene.start('PowerUpGuideScene'), false, 338);
+    menuButton(this, 640, 522, 'How to Play', () => this.showHow(), false, 338);
+    menuButton(this, 640, 584, AudioSystem.get().isMuted() ? 'Audio Off' : 'Audio On', () => {
       AudioSystem.get().toggleMute();
       this.scene.restart();
     }, false, 338);
-    menuButton(this, 640, 584, 'Controller Setup', () => this.scene.start('ControllerSetupScene'), false, 338);
-    this.add.text(640, 630, 'iPad: Share menu  >  Add to Home Screen', {
+    menuButton(this, 1060, 666, 'Controller Setup', () => this.scene.start('ControllerSetupScene'), false, 230);
+    this.add.text(640, 635, 'iPad: Share menu  >  Add to Home Screen', {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#c8b889'
     }).setOrigin(0.5);
     this.add.text(640, 682, `${SESSION.localPlayers} PLAYER  |  ${SESSION.mode.toUpperCase()}  |  ${SESSION.map.toUpperCase()}`, {

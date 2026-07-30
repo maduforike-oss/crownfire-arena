@@ -1,4 +1,4 @@
-CROWNFIRE ARENA - MOBILE BUILD
+CROWDFIRE ARENA - MOBILE BUILD
 
 Recommended installation:
 1. Host the contents of this folder on an HTTPS web host.
