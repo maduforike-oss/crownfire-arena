@@ -1718,7 +1718,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private beastClaw(actor: Player, directional: boolean): void {
-    const range = 6;
+    const range = 4;
     let target: Player | undefined;
     let endpoint = { ...actor.grid };
     if (directional) {

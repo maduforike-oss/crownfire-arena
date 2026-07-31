@@ -12,7 +12,7 @@ const EFFECTS: Record<string, string> = {
   ghostVeil: 'Immune to bomb damage for 5.5 seconds.',
   frostSnare: 'Stored in Power: leave owner-safe trapping frost for 4.5 seconds.',
   ravenBlink: 'Stored in Power: blink to the last safe tile in your facing direction.',
-  beastCall: 'Stored in Power: release a six-tile claw wave in your facing lane.',
+  beastCall: 'Stored in Power: release a four-tile claw wave in your facing lane.',
   remoteHex: 'Arm 3 bombs. E or HEX detonates the oldest armed bomb after a command flash.',
   crownSurge: 'Rare and automatic: 9 seconds of blast immunity and contact damage.'
 };
