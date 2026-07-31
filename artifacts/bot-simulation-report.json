@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-07-30T20:35:28.928Z",
+  "matches": 120,
+  "completionRate": 0.08333333333333333,
+  "averageSurvivors": 2.9833333333333334,
+  "averageDurationSeconds": 118.49208333333333,
+  "bombsPlaced": 7652,
+  "damageEvents": 558,
+  "eliminations": 122,
+  "abilityEliminations": 25,
+  "selfDetonations": 18,
+  "selfHits": 71,
+  "selfDetonationRatePerBomb": 0.0023523261892315736,
+  "pickupsCollected": 1457,
+  "shrineVisits": 3289,
+  "idleRecoveries": 1766,
+  "wins": {
+    "dragon": 4,
+    "wolf": 0,
+    "frost": 5,
+    "veil": 0,
+    "skin": 1,
+    "stone": 0,
+    "raven": 0,
+    "beast": 0
+  },
+  "byDifficulty": {
+    "easy": {
+      "matches": 40,
+      "completionRate": 0.1,
+      "averageSurvivors": 2.725,
+      "bombs": 2497,
+      "damageEvents": 155,
+      "eliminations": 51,
+      "abilityEliminations": 13,
+      "selfDetonations": 7,
+      "selfHits": 20,
+      "pickups": 505,
+      "shrineVisits": 1031
+    },
+    "normal": {
+      "matches": 40,
+      "completionRate": 0.075,
+      "averageSurvivors": 3.2,
+      "bombs": 2552,
+      "damageEvents": 197,
+      "eliminations": 32,
+      "abilityEliminations": 5,
+      "selfDetonations": 6,
+      "selfHits": 25,
+      "pickups": 486,
+      "shrineVisits": 1157
+    },
+    "hard": {
+      "matches": 40,
+      "completionRate": 0.075,
+      "averageSurvivors": 3.025,
+      "bombs": 2603,
+      "damageEvents": 206,
+      "eliminations": 39,
+      "abilityEliminations": 7,
+      "selfDetonations": 5,
+      "selfHits": 26,
+      "pickups": 466,
+      "shrineVisits": 1101
+    }
+  }
+}

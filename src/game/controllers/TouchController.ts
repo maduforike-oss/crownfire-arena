@@ -18,6 +18,7 @@ export class TouchController {
   private stickGlow?: Phaser.GameObjects.Arc;
   private remoteButton?: Phaser.GameObjects.Container;
   private remoteLabel?: Phaser.GameObjects.Text;
+  private powerLabel?: Phaser.GameObjects.Text;
   private readonly stickCenter: { x: number; y: number };
 
   constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
@@ -70,6 +71,10 @@ export class TouchController {
     this.remoteButton?.setVisible(available);
     this.remoteLabel?.setText(`HEX\n${armedBombs}`);
     if (!available) this.pending.delete('remote');
+  }
+
+  setStoredPowerAvailable(available: boolean): void {
+    this.powerLabel?.setText(available ? 'CAST\nRUNE' : 'POWER');
   }
 
   private createJoystick(): void {
@@ -166,6 +171,7 @@ export class TouchController {
     const button = this.scene.add.container(0, 0, [glow, face, label, zone]);
     this.root.add(button);
     if (action === 'remote') this.remoteLabel = label;
+    if (action === 'special') this.powerLabel = label;
     return button;
   }
 

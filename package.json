@@ -14,7 +14,8 @@
     "multiplayer:serve": "node server/lan-server.mjs",
     "social:dev": "tsx watch server/src/index.ts",
     "social:start": "node server-dist/index.js",
-    "test:social": "node server/test/social-smoke.mjs"
+    "test:social": "node server/test/social-smoke.mjs",
+    "test:bots": "tsx scripts/simulate_bot_matches.ts"
   },
   "dependencies": {
     "pg": "^8.22.0",

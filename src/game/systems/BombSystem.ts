@@ -43,6 +43,7 @@ export class BombSystem {
   }
 
   update(dt: number, actors: Player[]): Explosion[] {
+    this.refreshPreviews();
     const created: Explosion[] = [];
     for (const bomb of [...this.bombs]) {
       // Remote Hex suspends the fuse until the owner explicitly fires it.
@@ -55,6 +56,12 @@ export class BombSystem {
       if (explosion.remainingMs <= 0) this.explosions.splice(this.explosions.indexOf(explosion), 1);
     }
     return created;
+  }
+
+  refreshPreviews(): void {
+    for (const bomb of this.bombs) {
+      bomb.previewTiles = this.computeBlast(bomb.grid, bomb.radius);
+    }
   }
 
   detonateRemote(ownerId: string, actors: Player[]): Explosion[] {
@@ -76,7 +83,14 @@ export class BombSystem {
     const explosion = new Explosion(tiles, GAME_CONFIG.explosionMs, bomb.ownerId, bomb.frost, bomb.themeId);
     this.explosions.push(explosion);
     for (const other of [...this.bombs]) {
-      if (!other.remote && tiles.some((t) => sameTile(t, other.grid))) {
+      if (tiles.some((t) => sameTile(t, other.grid))) {
+        if (other.remote) {
+          other.remote = false;
+          const remoteOwner = actors.find((actor) => actor.id === other.ownerId);
+          if (remoteOwner) {
+            remoteOwner.stats.remoteArmedBombs = Math.max(0, remoteOwner.stats.remoteArmedBombs - 1);
+          }
+        }
         other.remainingMs = Math.min(other.remainingMs, 80);
       }
     }

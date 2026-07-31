@@ -6,15 +6,15 @@ import { addSceneBackdrop, addScreenTitle } from '../ui/ScenePresentation';
 const EFFECTS: Record<string, string> = {
   ember: 'Permanent +1 blast radius.',
   twin: 'Permanent +1 max rune bomb.',
-  wolfSprint: '35% speed boost for 8 seconds.',
+  wolfSprint: 'Auto-activates: 40% speed boost for 7 seconds.',
   stoneguard: 'Absorb one hit for 12 seconds. If wounded, restore 1 health instead.',
-  dragonCore: 'Next bomb gains +1 temporary radius.',
+  dragonCore: 'Stored in Power: release a six-tile cardinal Dragon Blast.',
   ghostVeil: 'Immune to bomb damage for 5.5 seconds.',
-  frostSnare: 'Next bomb leaves slowing frost tiles.',
-  ravenBlink: 'Blink up to 3 tiles in facing direction.',
-  beastCall: 'Launches a green claw attack at the nearest rival.',
-  remoteHex: 'Arm 3 bombs indefinitely. Each E or HEX press detonates the oldest armed bomb.',
-  crownSurge: 'Rare crown-star power: 9 seconds of blast immunity and contact damage.'
+  frostSnare: 'Stored in Power: leave owner-safe trapping frost for 4.5 seconds.',
+  ravenBlink: 'Stored in Power: blink to the last safe tile in your facing direction.',
+  beastCall: 'Stored in Power: release a six-tile claw wave in your facing lane.',
+  remoteHex: 'Arm 3 bombs. E or HEX detonates the oldest armed bomb after a command flash.',
+  crownSurge: 'Rare and automatic: 9 seconds of blast immunity and contact damage.'
 };
 
 const TAGS: Record<string, string> = {
@@ -22,11 +22,11 @@ const TAGS: Record<string, string> = {
   twin: 'Permanent',
   wolfSprint: 'Temporary',
   stoneguard: 'Charge',
-  dragonCore: 'Next Bomb',
+  dragonCore: 'Stored',
   ghostVeil: 'Temporary',
-  frostSnare: 'Next Bomb',
-  ravenBlink: 'Instant',
-  beastCall: 'Instant',
+  frostSnare: 'Stored',
+  ravenBlink: 'Stored',
+  beastCall: 'Stored',
   remoteHex: 'Charge',
   crownSurge: 'Rare'
 };

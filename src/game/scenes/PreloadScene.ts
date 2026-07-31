@@ -12,7 +12,33 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image('concept-sheet', 'assets/art/crownfire-concept-sheet.png');
+    this.cameras.main.setBackgroundColor('#09080d');
+    const title = this.add.text(640, 296, 'CROWDFIRE ARENA', {
+      fontFamily: 'Georgia, serif',
+      fontSize: '34px',
+      color: '#f4d88a',
+      stroke: '#08070b',
+      strokeThickness: 5
+    }).setOrigin(0.5);
+    const status = this.add.text(640, 348, 'Opening the arena...', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      color: '#d9c9a4'
+    }).setOrigin(0.5);
+    const track = this.add.rectangle(640, 386, 420, 12, 0x211b26, 1).setStrokeStyle(1, 0xd8a84e, 0.8);
+    const fill = this.add.rectangle(432, 386, 4, 8, 0xe56a32, 1).setOrigin(0, 0.5);
+
+    this.load.on('progress', (progress: number) => {
+      fill.width = Math.max(4, 416 * progress);
+      status.setText(`Loading kingdom art ${Math.round(progress * 100)}%`);
+    });
+    this.load.once('complete', () => {
+      title.destroy();
+      status.destroy();
+      track.destroy();
+      fill.destroy();
+    });
+
     this.load.image('reference-arena-atlas', 'assets/art/reference-arena-atlas.png');
     this.load.image('reference-character-power-atlas', 'assets/art/reference-character-power-atlas.png');
     this.load.image('champion-card-frame', 'assets/ui/champion_card_frame.png');

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { AnimationState, Direction } from '../utils/types';
 import type { Player } from '../entities/Player';
 import { getCharacter } from '../config/Characters';
+import { getPowerUp } from '../config/PowerUps';
 import type { CharacterClass } from '../utils/types';
 import {
   getChampionAnimation,
@@ -68,14 +69,14 @@ export class AnimationSystem {
     const spriteSize = actor.isHuman ? 118 : 108;
     const sprite = this.scene.add.image(0, 0, texture, 0).setDisplaySize(spriteSize, spriteSize);
     const motion = this.scene.add.container(0, -13, [sprite]);
-    const label = this.scene.add.text(0, 30, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
+    const label = this.scene.add.text(0, 52, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
       fontFamily: 'Georgia',
       fontSize: actor.isHuman ? '13px' : '11px',
       color: actor.isHuman ? '#ffe2a1' : '#d4cab8',
       stroke: '#08080c',
       strokeThickness: 3
     }).setOrigin(0.5);
-    const health = this.scene.add.container(0, 44);
+    const health = this.scene.add.container(0, 66);
     c.add([shadow, aura, buffAura, shieldAura, ring, marker, motion, label, health]);
     this.scene.tweens.add({ targets: aura, scale: 1.12, alpha: actor.isHuman ? 0.2 : 0.12, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     return {
@@ -130,6 +131,17 @@ export class AnimationSystem {
     visual.sprite.setFlipX(direction === 'left');
     visual.sprite.setDisplaySize(visual.spriteSize, visual.spriteSize);
     this.updateAnimationFrame(actor, visual);
+    if (actor.actionState === 'windup') {
+      visual.motion.setScale(0.96, 1.04).setAngle(direction === 'left' ? -2 : 2);
+    } else if (actor.actionState === 'release') {
+      visual.motion.setScale(1.05, 0.96).setAngle(direction === 'left' ? 4 : -4);
+    } else if (actor.actionState === 'recovery') {
+      visual.motion.setScale(1.01, 0.99).setAngle(0);
+    } else if (moving && actor.stats.temporarySpeedBoost > 0) {
+      visual.motion.setScale(1.04, 0.97).setAngle(direction === 'left' ? -4 : direction === 'right' ? 4 : 0);
+    } else {
+      visual.motion.setScale(1).setAngle(0);
+    }
     const contact = visual.state.startsWith('walk')
       ? 0.9 + Number(visual.sprite.frame.name) % 2 * 0.08
       : 1;
@@ -276,6 +288,9 @@ export class AnimationSystem {
     } else if (actor.stats.remoteCharges > 0) {
       color = 0xc050ff;
       alpha = 0.26;
+    } else if (actor.storedPower) {
+      color = getPowerUp(actor.storedPower).color;
+      alpha = 0.3;
     }
     visual.buffAura.setStrokeStyle(3, color, alpha).setFillStyle(color, alpha * 0.22).setAlpha(1);
     visual.buffAura.setScale(1 + Math.sin(this.scene.time.now / 180) * 0.06);
@@ -299,10 +314,42 @@ export class AnimationSystem {
   }
 
   private emitMovementAccent(actor: Player, x: number, y: number): void {
+    if (actor.stats.temporarySpeedBoost > 0) {
+      const pad = this.scene.add.circle(x, y + 18, 5, 0x9ec8ff, 0.7).setDepth(19);
+      const toeA = this.scene.add.circle(x - 5, y + 13, 2, 0xd8eeff, 0.7).setDepth(19);
+      const toeB = this.scene.add.circle(x + 5, y + 13, 2, 0xd8eeff, 0.7).setDepth(19);
+      this.scene.tweens.add({
+        targets: [pad, toeA, toeB],
+        alpha: 0,
+        scale: 0.7,
+        duration: 430,
+        onComplete: () => {
+          pad.destroy();
+          toeA.destroy();
+          toeB.destroy();
+        }
+      });
+      return;
+    }
     if (actor.character === 'skin') {
-      const texture = getCharacter(actor.character).assetKey;
-      const shade = this.scene.add.image(x, y - 16, texture).setDisplaySize(visualSize(actor), visualSize(actor)).setAlpha(0.2).setTint(0x9c704e).setDepth(19);
-      this.scene.tweens.add({ targets: shade, alpha: 0, scale: 0.92, duration: 260, onComplete: () => shade.destroy() });
+      const slashA = this.scene.add.rectangle(x - 8, y + 11, 20, 3, 0xb4855e, 0.64)
+        .setAngle(-18)
+        .setDepth(19);
+      const slashB = this.scene.add.rectangle(x + 8, y + 17, 14, 2, 0x71516f, 0.52)
+        .setAngle(16)
+        .setDepth(19);
+      this.scene.tweens.add({
+        targets: [slashA, slashB],
+        x: `-=${actor.lastDir.x * 18}`,
+        y: `-=${actor.lastDir.y * 18}`,
+        alpha: 0,
+        scaleX: 0.45,
+        duration: 240,
+        onComplete: () => {
+          slashA.destroy();
+          slashB.destroy();
+        }
+      });
       return;
     }
     this.emitFactionParticles(actor, x, y + 18, actor.character === 'stone' || actor.character === 'frost' ? 2 : 1);
@@ -324,9 +371,4 @@ export class AnimationSystem {
     particle.setDepth(35);
     return particle;
   }
-
-}
-
-function visualSize(actor: Player): number {
-  return actor.isHuman ? 106 : 98;
 }

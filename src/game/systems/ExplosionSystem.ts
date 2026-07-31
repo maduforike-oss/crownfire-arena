@@ -92,47 +92,61 @@ export class ExplosionSystem {
     return tiles.map((tile) => {
       const w = this.grid.toWorld(tile);
       const isCenter = `${tile.x},${tile.y}` === centerKey;
-      const group = this.scene.add.container(w.x, w.y);
-      const zone = this.scene.add.rectangle(
+      const group = this.scene.add.container(w.x, w.y).setAlpha(0.42);
+      const horizontal = center ? tile.y === center.y : true;
+      const dangerBed = this.scene.add.rectangle(
         0,
         0,
-        this.grid.tileSize - 5,
-        this.grid.tileSize - 5,
+        this.grid.tileSize - 7,
+        this.grid.tileSize - 7,
         theme.blastColor,
-        Math.max(alpha * 0.7, 0.18)
-      ).setStrokeStyle(isCenter ? 4 : 3, theme.coreColor, 0.96);
-      const inner = this.scene.add.rectangle(
+        Math.max(alpha * 0.12, 0.035)
+      );
+      const lane = this.scene.add.rectangle(
         0,
         0,
-        this.grid.tileSize - 15,
-        this.grid.tileSize - 15,
-        0x080810,
-        0.26
-      ).setStrokeStyle(1, theme.coreColor, 0.48);
+        isCenter ? 24 : horizontal ? this.grid.tileSize - 10 : 8,
+        isCenter ? 24 : horizontal ? 8 : this.grid.tileSize - 10,
+        theme.coreColor,
+        isCenter ? 0.3 : 0.42
+      ).setBlendMode(Phaser.BlendModes.ADD);
+      const brackets = this.scene.add.graphics();
+      const edge = this.grid.tileSize / 2 - 6;
+      const length = 8;
+      brackets.lineStyle(isCenter ? 3 : 2, theme.coreColor, isCenter ? 0.95 : 0.78);
+      brackets.beginPath();
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          brackets.moveTo(sx * edge, sy * (edge - length));
+          brackets.lineTo(sx * edge, sy * edge);
+          brackets.lineTo(sx * (edge - length), sy * edge);
+        }
+      }
+      brackets.strokePath();
       const rune = this.scene.add.image(0, 0, theme.explosionTexture)
-        .setDisplaySize(isCenter ? 45 : 36, isCenter ? 45 : 36)
+        .setDisplaySize(isCenter ? 34 : 15, isCenter ? 34 : 15)
         .setTint(theme.coreColor)
-        .setAlpha(isCenter ? 0.52 : 0.34)
+        .setAlpha(isCenter ? 0.62 : 0.12)
         .setBlendMode(Phaser.BlendModes.ADD);
-      group.add([zone, inner, rune]);
+      group.add([dangerBed, lane, brackets, rune]);
       if (isCenter) {
-        group.add(this.scene.add.circle(0, 0, 19, theme.coreColor, 0.06).setStrokeStyle(3, theme.coreColor, 0.92));
-        group.add(this.scene.add.circle(0, 0, 9, 0xffffff, 0.16).setStrokeStyle(2, 0xffffff, 0.86));
+        group.add(this.scene.add.circle(0, 0, 18, theme.coreColor, 0.05).setStrokeStyle(3, theme.coreColor, 0.94));
+        group.add(this.scene.add.circle(0, 0, 7, 0xffffff, 0.18).setStrokeStyle(2, 0xffffff, 0.88));
       } else if (center) {
         const dx = Math.sign(tile.x - center.x);
         const dy = Math.sign(tile.y - center.y);
         const arrow = dx !== 0
-          ? this.scene.add.triangle(0, 0, -8 * dx, -8, 10 * dx, 0, -8 * dx, 8, theme.coreColor, 0.94)
-          : this.scene.add.triangle(0, 0, -8, -8 * dy, 0, 10 * dy, 8, -8 * dy, theme.coreColor, 0.94);
+          ? this.scene.add.triangle(0, 0, -5 * dx, -5, 7 * dx, 0, -5 * dx, 5, theme.coreColor, 0.86)
+          : this.scene.add.triangle(0, 0, -5, -5 * dy, 0, 7 * dy, 5, -5 * dy, theme.coreColor, 0.86);
         group.add(arrow.setStrokeStyle(1, 0xffffff, 0.6));
       }
-      this.renderTelegraphMotif(group, theme);
+      if (isCenter) this.renderTelegraphMotif(group, theme);
       this.effectLayer.add(group);
       this.scene.tweens.add({
         targets: group,
         alpha: 0.68,
-        scale: 1.045,
-        duration: 220,
+        scale: 1.015,
+        duration: 210,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.inOut'

@@ -4,7 +4,9 @@ import type {
   Direction,
   GridPosition,
   PowerUpType,
-  Stats
+  Stats,
+  StoredPowerType,
+  ActionState
 } from '../utils/types';
 import type {
   OnlineRoomSeat,
@@ -39,7 +41,11 @@ export interface NetworkActorSnapshot {
   slowedMs: number;
   snaredMs: number;
   frostTrailMs: number;
+  frostTrailZoneMs: number;
   specialCooldownMs: number;
+  storedPower?: StoredPowerType;
+  actionState?: ActionState;
+  actionMs: number;
   lastDir: GridPosition;
   humanSlot: string | 'bot';
 }

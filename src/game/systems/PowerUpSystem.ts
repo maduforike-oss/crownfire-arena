@@ -5,6 +5,7 @@ import type { GridPosition, PowerUpType } from '../utils/types';
 import type { Player } from '../entities/Player';
 import type { GridSystem } from './GridSystem';
 import { choice, dirs, distance, keyOf, sameTile } from '../utils/math';
+import { isStoredPower } from '../config/PowerUps';
 
 export interface PowerUpBudget {
   dropChance?: number;
@@ -14,6 +15,7 @@ export interface PowerUpBudget {
 
 export class PowerUpSystem {
   readonly powerUps: PowerUp[] = [];
+  private readonly hiddenDrops = new Map<string, PowerUpType>();
   private nextId = 1;
   private readonly maxActive: number;
   private readonly minDistance: number;
@@ -23,14 +25,29 @@ export class PowerUpSystem {
     this.maxActive = budget.maxActive ?? 12;
     this.minDistance = budget.minDistance ?? 3;
     this.dropChance = budget.dropChance ?? GAME_CONFIG.dropChance;
+    this.seedHiddenDrops();
   }
 
   maybeDrop(pos: GridPosition, forceShard: boolean): PowerUp | undefined {
     if (forceShard || this.powerUps.length >= this.maxActive) return undefined;
     if (this.grid && this.grid.spawnReserved.has(keyOf(pos))) return undefined;
-    const chance = this.scoreTile(pos) >= 2 ? this.dropChance : this.dropChance * 0.55;
-    if (Math.random() > chance) return undefined;
-    return this.spawn(pos, this.weightedType());
+    const type = this.hiddenDrops.get(keyOf(pos));
+    this.hiddenDrops.delete(keyOf(pos));
+    return type ? this.spawn(pos, type) : undefined;
+  }
+
+  hiddenDropAt(pos: GridPosition): PowerUpType | undefined {
+    return this.hiddenDrops.get(keyOf(pos));
+  }
+
+  hiddenDropsNear(pos: GridPosition, radius: number): Array<{ grid: GridPosition; type: PowerUpType }> {
+    const found: Array<{ grid: GridPosition; type: PowerUpType }> = [];
+    for (const [key, type] of this.hiddenDrops) {
+      const [x, y] = key.split(',').map(Number);
+      const grid = { x, y };
+      if (distance(pos, grid) <= radius) found.push({ grid, type });
+    }
+    return found;
   }
 
   seedInitial(count = 3): void {
@@ -60,7 +77,12 @@ export class PowerUpSystem {
     if (!power) return undefined;
     this.powerUps.splice(this.powerUps.indexOf(power), 1);
     const def = POWER_UPS.find((p) => p.id === power.type);
-    return { label: def?.apply(actor.stats) ?? 'Power', id: power.id, type: power.type };
+    if (!def) return { label: 'Power', id: power.id, type: power.type };
+    if (isStoredPower(power.type)) {
+      actor.storedPower = power.type;
+      return { label: def.apply(actor.stats), id: power.id, type: power.type };
+    }
+    return { label: def.apply(actor.stats), id: power.id, type: power.type };
   }
 
   removeAt(pos: GridPosition): void {
@@ -89,6 +111,9 @@ export class PowerUpSystem {
   }
 
   private weightedType(): PowerUpType {
+    // Champion Surge owns an explicit roll. Adding it conditionally to a large
+    // weighted pool made the real probability roughly 0.3%, not 4.5%.
+    if (Math.random() < 0.045) return 'crownSurge';
     const pool: PowerUpType[] = [
       'ember',
       'ember',
@@ -103,9 +128,19 @@ export class PowerUpSystem {
       'ravenBlink',
       'beastCall',
       'remoteHex',
-      'remoteHex',
-      ...(Math.random() < 0.045 ? (['crownSurge'] as PowerUpType[]) : [])
+      'remoteHex'
     ];
     return choice(pool);
+  }
+
+  private seedHiddenDrops(): void {
+    if (!this.grid) return;
+    for (const [key, tile] of this.grid.tiles) {
+      if (tile !== 'destructible') continue;
+      const [x, y] = key.split(',').map(Number);
+      const pos = { x, y };
+      const chance = this.scoreTile(pos) >= 2 ? this.dropChance : this.dropChance * 0.55;
+      if (Math.random() <= chance) this.hiddenDrops.set(key, this.weightedType());
+    }
   }
 }

@@ -36,7 +36,9 @@ export class MapRenderer {
         const world = grid.toWorld(pos);
         const floorKey = `map-${grid.map.id}-floor-${this.floorVariant(grid.map.id, x, y)}`;
         const floor = this.scene.add.image(world.x, world.y, floorKey).setDisplaySize(grid.tileSize, grid.tileSize);
-        if (this.scene.textures.exists(`map-${grid.map.id}-premium-floor`)) floor.setAlpha(0.025);
+        if (this.scene.textures.exists(`map-${grid.map.id}-premium-floor`)) {
+          floor.setAlpha(grid.map.id === 'frost' || grid.map.id === 'hollow' ? 0.012 : 0.025);
+        }
         layers.tileLayer.add(floor);
 
         if (grid.spawnReserved.has(keyOf(pos))) this.renderSpawnPad(grid, layers.tileLayer, pos, debugSpawnSafe);
@@ -103,14 +105,21 @@ export class MapRenderer {
     tileLayer.add(floor);
     const glowKey = `map-${grid.map.id}-premium-floor-glow`;
     if (this.scene.textures.exists(glowKey)) {
+      const glowAlpha = grid.map.id === 'frost'
+        ? { low: 0.018, high: 0.034 }
+        : grid.map.id === 'hollow'
+          ? { low: 0.02, high: 0.038 }
+          : grid.map.id === 'moonfang'
+            ? { low: 0.03, high: 0.055 }
+            : { low: 0.045, high: 0.085 };
       const glow = this.scene.add.image(bounds.centerX, bounds.centerY, glowKey)
         .setDisplaySize(bounds.width, bounds.height)
         .setBlendMode(Phaser.BlendModes.ADD)
-        .setAlpha(0.045);
+        .setAlpha(glowAlpha.low);
       tileLayer.add(glow);
       this.scene.tweens.add({
         targets: glow,
-        alpha: 0.085,
+        alpha: glowAlpha.high,
         duration: 2200,
         yoyo: true,
         repeat: -1,
@@ -150,8 +159,9 @@ export class MapRenderer {
     const world = grid.toWorld(pos);
     const theme = getMapTheme(grid.map.id);
     const hash = (pos.x * 37 + pos.y * 53 + grid.map.id.length * 11) % 29;
+    const decalAlpha = grid.map.id === 'hollow' || grid.map.id === 'frost' ? 0.1 : 0.16;
     if (hash === 0 || hash === 5) {
-      tileLayer.add(this.scene.add.circle(world.x + 13, world.y - 12, 2.5, theme.accentColor, 0.16));
+      tileLayer.add(this.scene.add.circle(world.x + 13, world.y - 12, 2.5, theme.accentColor, decalAlpha));
     }
     if (hash === 3) {
       tileLayer.add(this.scene.add.line(0, 0, world.x - 14, world.y + 10, world.x + 15, world.y - 2, theme.accentColor, 0.14).setLineWidth(2));
@@ -194,12 +204,25 @@ export class MapRenderer {
       const scale = grid.tileSize / GAME_CONFIG.tileSize;
       const wallSize = (grid.map.id === 'ashen' ? 76 : 64) * scale;
       const wallOffset = (grid.map.id === 'ashen' ? -10 : -5) * scale;
-      wall.add(this.scene.add.image(0, wallOffset, premiumKey).setDisplaySize(wallSize, wallSize));
+      const image = this.scene.add.image(0, wallOffset, premiumKey).setDisplaySize(wallSize, wallSize);
+      if (grid.map.id === 'frost') image.setTint(0xa4b2bb);
+      if (grid.map.id === 'hollow') image.setTint(0x918b99);
+      if (grid.map.id === 'moonfang') image.setTint(0x94a0a4);
+      wall.add(image);
     } else {
       wall.add(this.scene.add.image(0, 0, `map-${grid.map.id}-solid`).setDisplaySize(53, 53));
     }
     if ((pos.x + pos.y) % 4 === 0) {
-      wall.add(this.scene.add.circle(0, -12, 5, theme.accentColor, 0.24));
+      const capColor = grid.map.id === 'frost'
+        ? 0xe4f0f4
+        : grid.map.id === 'hollow'
+          ? 0xc8c1ce
+          : theme.accentColor;
+      wall.add(this.scene.add.circle(0, -12, 5, capColor, grid.map.id === 'ashen' ? 0.24 : 0.17));
+    }
+    if (grid.map.id === 'moonfang' && (pos.x * 3 + pos.y) % 7 === 0) {
+      wall.add(this.scene.add.arc(0, -8, 7, 65, 295, false, 0x8fb6d8, 0)
+        .setStrokeStyle(1.5, 0x8fb6d8, 0.36));
     }
     return wall;
   }
@@ -214,9 +237,21 @@ export class MapRenderer {
       const scale = grid.tileSize / GAME_CONFIG.tileSize;
       const blockSize = (grid.map.id === 'ashen' ? 70 : 58) * scale;
       const blockOffset = (grid.map.id === 'ashen' ? -7 : 0) * scale;
-      block.add(this.scene.add.image(0, blockOffset, premiumKey).setDisplaySize(blockSize, blockSize));
+      const image = this.scene.add.image(0, blockOffset, premiumKey).setDisplaySize(blockSize, blockSize);
+      if (grid.map.id === 'frost') image.setTint(0xd7edf2);
+      if (grid.map.id === 'hollow') image.setTint(0xc5a9cc);
+      if (grid.map.id === 'moonfang') image.setTint(0xa7ad8e);
+      block.add(image);
     } else {
       block.add(this.scene.add.image(0, 0, `map-${grid.map.id}-block`).setDisplaySize(52, 52));
+    }
+    if (grid.map.id === 'moonfang') {
+      block.add(this.scene.add.circle(-11, 8, 3, 0x647856, 0.54));
+      block.add(this.scene.add.circle(10, -7, 2, 0x758664, 0.46));
+    } else if (grid.map.id === 'frost') {
+      block.add(this.scene.add.line(0, 0, -12, 8, 9, -10, 0xe7fbff, 0.38).setLineWidth(1.5));
+    } else if (grid.map.id === 'hollow') {
+      block.add(this.scene.add.circle(0, -4, 6, 0xd7bcdf, 0.06).setStrokeStyle(1.5, 0xd7bcdf, 0.42));
     }
     return block;
   }

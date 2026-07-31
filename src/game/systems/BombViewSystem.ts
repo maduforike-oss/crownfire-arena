@@ -100,6 +100,21 @@ export class BombViewSystem {
     }
   }
 
+  flashRemote(bombId: string): void {
+    const view = this.views.get(bombId);
+    if (!view) return;
+    view.sprite.setTint(0xe0a0ff);
+    view.ring.setFillStyle(0xc050ff, 0.34).setStrokeStyle(4, 0xf0d0ff, 1);
+    view.label.setText('HEX!');
+    this.scene.tweens.add({
+      targets: [view.sprite, view.ring],
+      scale: 1.38,
+      duration: 70,
+      yoyo: true,
+      repeat: 1
+    });
+  }
+
   cleanup(): void {
     this.clearTelegraphs();
     for (const [id, view] of [...this.views]) this.destroyView(id, view);

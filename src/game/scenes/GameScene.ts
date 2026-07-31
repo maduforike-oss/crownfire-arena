@@ -3,10 +3,10 @@ import { SESSION, GAME_CONFIG } from '../config/GameConfig';
 import { MAPS, makeExpandedMap } from '../config/Maps';
 import { MODES } from '../config/Modes';
 import { CHARACTERS, makeStats } from '../config/Characters';
-import { getPowerUp } from '../config/PowerUps';
+import { getPowerUp, isStoredPower, POWER_UPS } from '../config/PowerUps';
 import { Player } from '../entities/Player';
 import { Bot } from '../entities/Bot';
-import type { Direction, GridPosition, PowerUpType } from '../utils/types';
+import type { Direction, GridPosition, PowerUpType, StoredPowerType } from '../utils/types';
 import { keyOf, sameTile, distance, clamp } from '../utils/math';
 import { GridSystem } from '../systems/GridSystem';
 import { BombSystem } from '../systems/BombSystem';
@@ -15,7 +15,7 @@ import { DangerMapSystem } from '../systems/DangerMapSystem';
 import { ModeSystem } from '../systems/ModeSystem';
 import { awardMatch } from '../systems/RewardSystem';
 import { HumanController } from '../controllers/HumanController';
-import { AIController, type BotIntent } from '../controllers/AIController';
+import { AIController } from '../controllers/AIController';
 import { HUD } from '../ui/HUD';
 import { AnimationSystem, type ActorVisual } from '../systems/AnimationSystem';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
@@ -26,7 +26,6 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { MatchTelemetrySystem } from '../systems/MatchTelemetrySystem';
 import { BombViewSystem } from '../systems/BombViewSystem';
 import { TouchController } from '../controllers/TouchController';
-import { POWER_UPS } from '../config/PowerUps';
 import { setMatchPresentation, type DeviceProfile } from '../systems/DeviceProfile';
 import { menuButton } from '../ui/MenuButton';
 import { DragonBlastVfxSystem } from '../systems/DragonBlastVfxSystem';
@@ -39,6 +38,14 @@ import type {
 } from '../network/NetworkProtocol';
 import { Bomb } from '../entities/Bomb';
 import { PowerUp } from '../entities/PowerUp';
+import { applyBotProfile, buildBotRoster } from '../config/BotProfiles';
+
+interface MirrorDecoy {
+  ownerId: string;
+  target: Player;
+  visual: Phaser.GameObjects.Container;
+  remainingMs: number;
+}
 
 export class GameScene extends Phaser.Scene {
   private grid!: GridSystem;
@@ -67,6 +74,10 @@ export class GameScene extends Phaser.Scene {
   private frostZones = new Map<string, number>();
   private frostZoneOwners = new Map<string, string>();
   private frostSprites = new Map<string, Phaser.GameObjects.Container>();
+  private runeSightSprites = new Map<string, Phaser.GameObjects.Container>();
+  private mirrorDecoys = new Map<string, MirrorDecoy>();
+  private storedPowerAim?: Phaser.GameObjects.Container;
+  private storedPowerAimKey = '';
   private shrineTimerMs = 15000;
   private shrineTile!: GridPosition;
   private shrineCountdown?: Phaser.GameObjects.Arc;
@@ -163,6 +174,8 @@ export class GameScene extends Phaser.Scene {
     this.updateShrine(dt);
     this.updateFrostZones(dt);
     this.resolveChampionSurgeTouches();
+    this.bombs.refreshPreviews();
+    this.danger.rebuild(this.bombs.bombs, this.bombs.activeBlastTiles());
     this.updateHuman(dt);
     this.updateHuman2(dt);
     if (this.network.active && this.network.role === 'host') this.updateNetworkRemote(dt);
@@ -314,12 +327,11 @@ export class GameScene extends Phaser.Scene {
         input.bomb = false;
       }
       if (input.special) {
-        this.useSpecial(remote);
+        this.usePowerOrSpecial(remote);
         input.special = false;
       }
       if (input.remote) {
-        const explosions = this.bombs.detonateRemote(remote.id, this.actors);
-        for (const explosion of explosions) this.resolveExplosion(explosion);
+        this.triggerRemote(remote);
         input.remote = false;
       }
     }
@@ -344,7 +356,11 @@ export class GameScene extends Phaser.Scene {
         slowedMs: actor.slowedMs,
         snaredMs: actor.snaredMs,
         frostTrailMs: actor.frostTrailMs,
+        frostTrailZoneMs: actor.frostTrailZoneMs,
         specialCooldownMs: actor.specialCooldownMs,
+        storedPower: actor.storedPower,
+        actionState: actor.actionState,
+        actionMs: actor.actionMs,
         lastDir: { ...actor.lastDir },
         humanSlot: actor.id.startsWith('online-') ? actor.id.slice('online-'.length) : 'bot'
       })),
@@ -395,7 +411,11 @@ export class GameScene extends Phaser.Scene {
       actor.slowedMs = incoming.slowedMs;
       actor.snaredMs = incoming.snaredMs;
       actor.frostTrailMs = incoming.frostTrailMs;
+      actor.frostTrailZoneMs = incoming.frostTrailZoneMs;
       actor.specialCooldownMs = incoming.specialCooldownMs;
+      actor.storedPower = incoming.storedPower;
+      actor.actionState = incoming.actionState;
+      actor.actionMs = incoming.actionMs;
       actor.lastDir = { ...incoming.lastDir };
     }
 
@@ -578,8 +598,7 @@ export class GameScene extends Phaser.Scene {
             definition.palette,
             definition.accent
           );
-          bot.stats.health = 2;
-          bot.stats.maxHealth = 2;
+          applyBotProfile(bot.stats, this.ai.difficulty);
           return bot;
         }
         return new Player(
@@ -655,7 +674,7 @@ export class GameScene extends Phaser.Scene {
       );
       this.actors.push(guest);
       if (this.network.role === 'player') this.player = guest;
-      const botDefs = ['frost', 'veil'] as const;
+      const botDefs = buildBotRoster(mainChar.id, this.grid.map.id, 2);
       for (let i = 2; i < 4; i += 1) {
         const botDef = CHARACTERS.find((character) => character.id === botDefs[i - 2]) ?? CHARACTERS[0];
         const botSpawn = this.grid.map.spawns[i];
@@ -670,8 +689,7 @@ export class GameScene extends Phaser.Scene {
           botDef.palette,
           botDef.accent
         );
-        bot.stats.health = 2;
-        bot.stats.maxHealth = 2;
+        applyBotProfile(bot.stats, this.ai.difficulty);
         this.actors.push(bot);
       }
       for (const actor of this.actors) this.makeActorView(actor);
@@ -685,13 +703,12 @@ export class GameScene extends Phaser.Scene {
       this.actors.push(p2);
       botStartIndex = 2;
     }
-    const botChars = ['wolf', 'frost', 'veil', 'stone'] as const;
+    const botChars = buildBotRoster(mainChar.id, this.grid.map.id, 4 - botStartIndex);
     for (let i = botStartIndex; i < 4; i += 1) {
       const ch = CHARACTERS.find((c) => c.id === botChars[i - botStartIndex])!;
       const p = this.grid.map.spawns[i];
       const bot = new Bot(`bot-${i}`, ch.name, ch.id, { ...p }, this.grid.toWorld(p), makeStats(ch.id), false, ch.palette, ch.accent);
-      bot.stats.health = 2;
-      bot.stats.maxHealth = 2;
+      applyBotProfile(bot.stats, this.ai.difficulty);
       this.actors.push(bot);
     }
     for (const actor of this.actors) this.makeActorView(actor);
@@ -714,18 +731,12 @@ export class GameScene extends Phaser.Scene {
 
   private updateHuman(dt: number): void {
     this.touch?.setRemoteAvailable(this.player.stats.remoteArmedBombs);
+    this.touch?.setStoredPowerAvailable(!!this.player.storedPower);
     const touchDirection = this.touch?.direction() ?? 'none';
     this.moveActor(this.player, touchDirection !== 'none' ? touchDirection : this.human.direction(), dt);
     if (this.human.consumeBomb() || this.touch?.consumeBomb()) this.placeBomb(this.player);
-    if (this.human.consumeRemote() || this.touch?.consumeRemote()) {
-      const remoteExplosions = this.bombs.detonateRemote(this.player.id, this.actors);
-      if (remoteExplosions.length > 0) {
-        this.specialPulse(this.player, 0xc050ff);
-        AudioSystem.get().sfx('blink');
-      }
-      for (const explosion of remoteExplosions) this.resolveExplosion(explosion);
-    }
-    if (this.human.consumeSpecial() || this.touch?.consumeSpecial()) this.useSpecial(this.player);
+    if (this.human.consumeRemote() || this.touch?.consumeRemote()) this.triggerRemote(this.player);
+    if (this.human.consumeSpecial() || this.touch?.consumeSpecial()) this.usePowerOrSpecial(this.player);
   }
 
   private updateHuman2(dt: number): void {
@@ -734,32 +745,82 @@ export class GameScene extends Phaser.Scene {
     if (!player2) return;
     this.moveActor(player2, this.human2.direction(), dt);
     if (this.human2.consumeBomb()) this.placeBomb(player2);
-    if (this.human2.consumeRemote()) {
-      const remoteExplosions = this.bombs.detonateRemote(player2.id, this.actors);
-      if (remoteExplosions.length > 0) {
-        this.specialPulse(player2, 0xc050ff);
-        AudioSystem.get().sfx('blink');
-      }
-      for (const explosion of remoteExplosions) this.resolveExplosion(explosion);
-    }
-    if (this.human2.consumeSpecial()) this.useSpecial(player2);
+    if (this.human2.consumeRemote()) this.triggerRemote(player2);
+    if (this.human2.consumeSpecial()) this.usePowerOrSpecial(player2);
   }
 
   private updateBots(dt: number): void {
-    if (SESSION.mode === 'sandbox') return;
+      if (SESSION.mode === 'sandbox') return;
     for (const bot of this.actors.filter((a): a is Bot => a instanceof Bot && a.alive)) {
       if (this.spawnGraceMs > 0) continue;
-      bot.thinkMs -= dt;
-      let intent: BotIntent = { dir: 'none' as Direction, placeBomb: false };
-      if (bot.thinkMs <= 0 || distance(bot.grid, this.player.grid) < 4) {
-        intent = this.ai.think(bot, this.actors.filter((actor) => actor !== bot && actor.alive), this.grid, this.bombs, this.danger, this.powers);
-        bot.thinkMs = this.ai.reactionDelay();
+      if (!bot.lastMovementTile) bot.lastMovementTile = { ...bot.grid };
+      const changedTile = !sameTile(bot.lastMovementTile, bot.grid);
+      if (changedTile) {
+        bot.lastMovementTile = { ...bot.grid };
+        bot.stuckMs = 0;
+      } else if (
+        bot.currentIntent.dir === 'none'
+        && this.bombs.bombs.some((bomb) => bomb.ownerId === bot.id)
+      ) {
+        bot.stuckMs = 0;
+      } else {
+        bot.stuckMs += dt;
       }
-      // Resolve the tactical decision first: Dragon/Frost must arm the bomb
-      // being placed this tick, then immediately start the planned escape.
-      if (intent.useSpecial) this.useSpecial(bot);
-      if (intent.placeBomb) this.placeBomb(bot);
+      bot.thinkMs -= dt;
+      const hasOwnBomb = this.bombs.bombs.some((bomb) => bomb.ownerId === bot.id);
+      const reachedTarget = !hasOwnBomb
+        && !!bot.currentIntent.target
+        && sameTile(bot.grid, bot.currentIntent.target);
+      if (changedTile && bot.currentIntent.target && !reachedTarget) {
+        bot.currentIntent = this.ai.continueIntent(bot, bot.currentIntent, this.grid, this.bombs, this.danger);
+      }
+      const dangerReplan = this.danger.isDanger(bot.grid, 1250) && bot.state !== 'FLEE_DANGER';
+      const escapeTargetUnsafe = !!bot.currentIntent.target
+        && bot.state === 'FLEE_DANGER'
+        && this.danger.isDanger(bot.currentIntent.target, GAME_CONFIG.bombFuseMs);
+      const forceReplan = bot.stuckMs >= 1000 || reachedTarget || dangerReplan || escapeTargetUnsafe;
+      const periodicReplan = bot.thinkMs <= 0
+        && (!bot.currentIntent.target || bot.state === 'CHASE_PLAYER' || bot.state === 'IDLE');
+      if (periodicReplan || forceReplan) {
+        bot.currentIntent = this.ai.think(
+          bot,
+          [
+            ...this.actors.filter((actor) => actor !== bot && actor.alive),
+            ...[...this.mirrorDecoys.values()]
+              .filter((decoy) => decoy.ownerId !== bot.id)
+              .map((decoy) => decoy.target)
+          ],
+          this.grid,
+          this.bombs,
+          this.danger,
+          this.powers
+        );
+        bot.intentTarget = bot.currentIntent.target ? { ...bot.currentIntent.target } : undefined;
+        bot.lastDecisionTile = { ...bot.grid };
+        bot.thinkMs = this.ai.reactionDelay();
+        if (forceReplan) bot.stuckMs = 0;
+      }
+      const intent = bot.currentIntent;
+      if (intent.useSpecial) {
+        if (intent.dir === 'up') bot.lastDir = { x: 0, y: -1 };
+        else if (intent.dir === 'down') bot.lastDir = { x: 0, y: 1 };
+        else if (intent.dir === 'left') bot.lastDir = { x: -1, y: 0 };
+        else if (intent.dir === 'right') bot.lastDir = { x: 1, y: 0 };
+        this.usePowerOrSpecial(bot);
+        intent.useSpecial = false;
+      }
+      if (intent.placeBomb) {
+        this.placeBomb(bot);
+        intent.placeBomb = false;
+        bot.thinkMs = 0;
+      }
+      const before = { ...bot.world };
       this.moveActor(bot, intent.dir, dt);
+      const moved = Math.abs(before.x - bot.world.x) + Math.abs(before.y - bot.world.y) > 0.05;
+      if (!moved && intent.dir !== 'none' && bot.stuckMs > 220) {
+        bot.currentIntent.dir = 'none';
+        bot.thinkMs = 0;
+      }
     }
   }
 
@@ -771,7 +832,7 @@ export class GameScene extends Phaser.Scene {
     actor.lastDir = d;
     const previousGrid = { ...actor.grid };
     const surgeBoost = actor.stats.championSurgeMs > 0 ? 18 : 0;
-    const speedBoost = actor.stats.temporarySpeedBoost > 0 ? actor.stats.moveSpeed * 0.35 : 0;
+    const speedBoost = actor.stats.temporarySpeedBoost > 0 ? actor.stats.moveSpeed * 0.4 : 0;
     const speed = (actor.stats.moveSpeed + speedBoost + surgeBoost) * (actor.slowedMs > 0 ? 0.52 : 1);
     const nextWorld = { x: actor.world.x + d.x * speed * dt / 1000, y: actor.world.y + d.y * speed * dt / 1000 };
     const nextGrid = this.grid.toGrid(nextWorld);
@@ -788,8 +849,9 @@ export class GameScene extends Phaser.Scene {
     actor.world.x = clamp(actor.world.x, bounds.x - halfTile, bounds.x + halfTile);
     actor.world.y = clamp(actor.world.y, bounds.y - halfTile, bounds.y + halfTile);
     if (!sameTile(previousGrid, actor.grid) && actor.frostTrailMs > 0) {
-      this.addFrostZone(previousGrid, 4200, actor.id);
-      this.addFrostZone(actor.grid, 4200, actor.id);
+      const zoneMs = actor.frostTrailZoneMs || 3500;
+      this.addFrostZone(previousGrid, zoneMs, actor.id);
+      this.addFrostZone(actor.grid, zoneMs, actor.id);
     }
     this.animation.emitFootstep(actor);
   }
@@ -806,6 +868,25 @@ export class GameScene extends Phaser.Scene {
     if (view) this.animation.playPlaceBomb(actor, view);
     this.specialPulse(actor, theme.blastColor);
     this.floatText(w.x, w.y - 35, actor.isHuman ? 'Rune set' : 'Hex!', actor.isHuman ? '#ffd36b' : '#ff9d8f');
+  }
+
+  private triggerRemote(actor: Player): void {
+    const armed = this.bombs.bombs.find((bomb) => bomb.ownerId === actor.id && bomb.remote);
+    if (!armed || actor.actionMs > 0) return;
+    actor.actionState = 'windup';
+    actor.actionMs = 260;
+    const view = this.views.get(actor.id);
+    if (view) this.animation.playSpecial(actor, view, 0xc050ff);
+    this.bombViews.flashRemote(armed.id);
+    this.specialPulse(actor, 0xc050ff);
+    AudioSystem.get().sfx('tick');
+    this.time.delayedCall(150, () => {
+      if (!actor.alive || this.ended) return;
+      actor.actionState = 'release';
+      const explosions = this.bombs.detonateRemote(actor.id, this.actors);
+      for (const explosion of explosions) this.resolveExplosion(explosion);
+      AudioSystem.get().sfx('blink');
+    });
   }
 
   private resolveExplosion(explosion: import('../entities/Explosion').Explosion): void {
@@ -842,6 +923,9 @@ export class GameScene extends Phaser.Scene {
         this.damageActor(actor, explosion.ownerId);
       }
     }
+    for (const [id, decoy] of [...this.mirrorDecoys]) {
+      if (explosion.tiles.some((tile) => sameTile(tile, decoy.target.grid))) this.removeDecoy(id, true);
+    }
     if (explosion.frost) {
       for (const tile of explosion.tiles) this.addFrostZone(tile, 3000, explosion.ownerId);
     }
@@ -860,7 +944,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private damageActor(actor: Player, ownerId: string): void {
-    if (actor.invulnerableMs > 0 || actor.stats.temporaryGhostMode > 0 || actor.stats.championSurgeMs > 0) return;
+    if (actor.stats.temporaryGhostMode > 0) {
+      this.floatText(actor.world.x, actor.world.y - 44, 'VEILED', '#eee8ff');
+      this.specialPulse(actor, 0xded8ff);
+      return;
+    }
+    if (actor.stats.championSurgeMs > 0) {
+      this.floatText(actor.world.x, actor.world.y - 44, 'SURGE', '#fff0a0');
+      this.specialPulse(actor, 0xfff0a0);
+      return;
+    }
+    if (actor.invulnerableMs > 0) return;
     if (actor.stats.shielded) {
       actor.stats.shielded = false;
       actor.stats.shieldMs = 0;
@@ -901,9 +995,11 @@ export class GameScene extends Phaser.Scene {
       actor.lastPowerUp = pickup.type;
       actor.lastPowerUpMs = 4200;
       actor.runesCollected += 1;
-      this.applyPowerUpFeedback(actor, pickup.type, pickup.label);
-      if (actor.isHuman) this.pulseHudForPower(pickup.type);
+      this.applyPowerUpFeedback(actor, pickup.type);
+      if (actor.isHuman) {
+        this.pulseHudForPower(pickup.type);
         this.floatPickup(actor.world.x, actor.world.y - 50, pickup.type, pickup.label);
+      }
         this.redrawHealth(actor);
         this.powerSprites.get(pickup.id)?.destroy();
         this.powerSprites.delete(pickup.id);
@@ -943,6 +1039,84 @@ export class GameScene extends Phaser.Scene {
         this.powerSprites.set(power.id, this.createPickupView(w.x, w.y, texture, def.color));
       }
     }
+    this.updateRuneSight();
+    this.updateStoredPowerAim();
+  }
+
+  private updateRuneSight(): void {
+    const revealed = this.player.alive && this.player.character === 'raven'
+      ? this.powers.hiddenDropsNear(this.player.grid, 5)
+      : [];
+    const live = new Set(revealed.map((drop) => keyOf(drop.grid)));
+    for (const [key, marker] of [...this.runeSightSprites]) {
+      if (!live.has(key)) {
+        marker.destroy(true);
+        this.runeSightSprites.delete(key);
+      }
+    }
+    for (const drop of revealed) {
+      const key = keyOf(drop.grid);
+      if (this.runeSightSprites.has(key)) continue;
+      const def = getPowerUp(drop.type);
+      const world = this.grid.toWorld(drop.grid);
+      const marker = this.add.container(world.x, world.y - 23);
+      const eye = this.add.ellipse(0, 0, 31, 17, 0x12101a, 0.94).setStrokeStyle(2, 0xb394ff, 0.88);
+      const icon = this.add.image(0, 0, this.textures.exists(def.assetKey) ? def.assetKey : 'power-fallback')
+        .setDisplaySize(14, 14);
+      marker.add([eye, icon]);
+      marker.setDepth(39);
+      this.effectLayer.add(marker);
+      this.tweens.add({ targets: marker, y: marker.y - 4, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.runeSightSprites.set(key, marker);
+    }
+  }
+
+  private updateStoredPowerAim(): void {
+    const power = this.player.storedPower;
+    const direction = this.player.lastDir;
+    const key = power
+      ? `${power}:${this.player.grid.x},${this.player.grid.y}:${direction.x},${direction.y}`
+      : '';
+    if (key === this.storedPowerAimKey) return;
+    this.storedPowerAim?.destroy(true);
+    this.storedPowerAim = undefined;
+    this.storedPowerAimKey = key;
+    if (!power || power === 'frostSnare' || this.player.actionMs > 0) return;
+
+    const def = getPowerUp(power);
+    const maxTiles = power === 'ravenBlink' ? 3 : 6;
+    const aim = this.add.container(0, 0).setAlpha(0.62);
+    let endpoint = { ...this.player.grid };
+    for (let step = 1; step <= maxTiles; step += 1) {
+      const tile = {
+        x: this.player.grid.x + direction.x * step,
+        y: this.player.grid.y + direction.y * step
+      };
+      if (!this.grid.inBounds(tile) || this.grid.get(tile) === 'solid') break;
+      if (power !== 'ravenBlink' && this.grid.get(tile) !== 'empty') break;
+      if (this.grid.isWalkable(tile) && !this.bombs.isBombBlocking(tile)) endpoint = tile;
+      else if (power !== 'ravenBlink') break;
+      const world = this.grid.toWorld(tile);
+      const horizontal = direction.x !== 0;
+      const rail = this.add.rectangle(
+        world.x,
+        world.y,
+        horizontal ? this.grid.tileSize - 18 : 5,
+        horizontal ? 5 : this.grid.tileSize - 18,
+        def.color,
+        0.5
+      );
+      const arrow = horizontal
+        ? this.add.triangle(world.x, world.y, -6 * direction.x, -6, 8 * direction.x, 0, -6 * direction.x, 6, 0xffffff, 0.72)
+        : this.add.triangle(world.x, world.y, -6, -6 * direction.y, 0, 8 * direction.y, 6, -6 * direction.y, 0xffffff, 0.72);
+      aim.add([rail, arrow]);
+    }
+    if (!sameTile(endpoint, this.player.grid)) {
+      const destination = this.grid.toWorld(endpoint);
+      aim.add(this.add.circle(destination.x, destination.y, 13, def.color, 0.08).setStrokeStyle(2, def.color, 0.9));
+    }
+    this.effectLayer.add(aim);
+    this.storedPowerAim = aim;
   }
 
   private createPickupView(
@@ -995,8 +1169,66 @@ export class GameScene extends Phaser.Scene {
     return view;
   }
 
+  private usePowerOrSpecial(actor: Player): void {
+    if (!actor.alive || actor.actionMs > 0) return;
+    if (actor.storedPower) {
+      this.activateStoredPower(actor, actor.storedPower);
+      return;
+    }
+    this.useSpecial(actor);
+  }
+
+  private activateStoredPower(actor: Player, power: StoredPowerType): void {
+    actor.storedPower = undefined;
+    const def = getPowerUp(power);
+    if (power === 'dragonCore') {
+      this.beginAction(actor, def.color, 210, 170, () => this.dragonBlast(actor));
+      this.floatText(actor.world.x, actor.world.y - 56, 'Dragonflame released', '#ffb36b');
+      return;
+    }
+    if (power === 'beastCall') {
+      this.beginAction(actor, def.color, 190, 150, () => this.beastClaw(actor, true));
+      this.floatText(actor.world.x, actor.world.y - 56, 'Beast Call released', '#b8ef9f');
+      return;
+    }
+    if (power === 'ravenBlink') {
+      this.beginAction(actor, def.color, 160, 130, () => this.blinkActor(actor, 3, def.color, true));
+      this.floatText(actor.world.x, actor.world.y - 56, 'Raven Blink', '#d9b8ff');
+      return;
+    }
+    this.beginAction(actor, def.color, 190, 150, () => {
+      actor.frostTrailMs = 4500;
+      actor.frostTrailZoneMs = 3500;
+      this.addFrostZone(actor.grid, actor.frostTrailZoneMs, actor.id);
+      this.frostActivation(actor, false);
+    });
+    this.floatText(actor.world.x, actor.world.y - 56, 'Frostsnare - 4.5s', '#bcefff');
+  }
+
+  private beginAction(
+    actor: Player,
+    color: number,
+    windupMs: number,
+    recoveryMs: number,
+    release: () => void
+  ): void {
+    actor.actionState = 'windup';
+    actor.actionMs = windupMs + recoveryMs;
+    const view = this.views.get(actor.id);
+    if (view) this.animation.playSpecial(actor, view, color);
+    this.specialPulse(actor, color);
+    this.time.delayedCall(windupMs, () => {
+      if (!actor.alive || this.ended) return;
+      actor.actionState = 'release';
+      release();
+      this.time.delayedCall(80, () => {
+        if (actor.actionMs > 0) actor.actionState = 'recovery';
+      });
+    });
+  }
+
   private useSpecial(actor: Player): void {
-    if (actor.specialCooldownMs > 0) return;
+    if (actor.specialCooldownMs > 0 || actor.actionMs > 0) return;
     const view = this.views.get(actor.id);
     actor.specialCooldownMs = 6500;
     if (actor.character === 'dragon') {
@@ -1015,7 +1247,9 @@ export class GameScene extends Phaser.Scene {
     } else if (actor.character === 'frost') {
       actor.specialCooldownMs = 10000;
       actor.frostTrailMs = 5000;
-      this.addFrostZone(actor.grid, 4200, actor.id);
+      actor.frostTrailZoneMs = 4700;
+      this.addFrostZone(actor.grid, actor.frostTrailZoneMs, actor.id);
+      this.frostActivation(actor, true);
       this.floatText(actor.world.x, actor.world.y - 50, 'Ice Feet - 5s', '#82e8ff');
       this.specialPulse(actor, 0x82e8ff);
       if (view) this.animation.playSpecial(actor, view, 0x82e8ff);
@@ -1050,7 +1284,7 @@ export class GameScene extends Phaser.Scene {
       AudioSystem.get().sfx('blink');
     } else {
       actor.specialCooldownMs = 12000;
-      this.beastClaw(actor);
+      this.beastClaw(actor, false);
       this.floatText(actor.world.x, actor.world.y - 50, 'Beast Call', '#8bd56f');
       if (view) this.animation.playSpecial(actor, view, 0x8bd56f);
       AudioSystem.get().sfx('beast');
@@ -1065,6 +1299,9 @@ export class GameScene extends Phaser.Scene {
       actor.snaredMs = Math.max(0, actor.snaredMs - dt);
       actor.frostImmunityMs = Math.max(0, actor.frostImmunityMs - dt);
       actor.frostTrailMs = Math.max(0, actor.frostTrailMs - dt);
+      actor.actionMs = Math.max(0, actor.actionMs - dt);
+      if (actor.actionMs <= 0) actor.actionState = undefined;
+      if (actor.frostTrailMs <= 0) actor.frostTrailZoneMs = 0;
       actor.specialCooldownMs = Math.max(0, actor.specialCooldownMs - dt);
       actor.lastPowerUpMs = Math.max(0, actor.lastPowerUpMs - dt);
       if (actor.lastPowerUpMs <= 0) actor.lastPowerUp = undefined;
@@ -1076,6 +1313,10 @@ export class GameScene extends Phaser.Scene {
         actor.stats.shielded = false;
         this.floatText(actor.world.x, actor.world.y - 46, 'Shield faded', '#d6c8a4');
       }
+    }
+    for (const [id, decoy] of [...this.mirrorDecoys]) {
+      decoy.remainingMs -= dt;
+      if (decoy.remainingMs <= 0) this.removeDecoy(id, false);
     }
   }
 
@@ -1100,17 +1341,21 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: group, y: -28, alpha: 0, duration: 1050, onComplete: () => group.destroy() });
   }
 
-  private applyPowerUpFeedback(actor: Player, type: PowerUpType, label: string): void {
+  private applyPowerUpFeedback(actor: Player, type: PowerUpType): void {
     const def = getPowerUp(type);
     const color = def.color;
     const view = this.views.get(actor.id);
     this.animation.emitPickupBurst(actor, color, type === 'crownSurge' ? 22 : 14);
     if (view) this.animation.playSpecial(actor, view, color);
     this.specialPulse(actor, color);
-    if (type === 'ravenBlink') this.blinkActor(actor, 3, color, true);
-    if (type === 'beastCall') this.beastClaw(actor);
     if (type === 'twin') this.orbitRunes(actor, color);
-    if (type === 'remoteHex') this.floatText(actor.world.x, actor.world.y - 70, `Remote x${actor.stats.remoteCharges}`, '#d9b8ff');
+    if (type === 'remoteHex' && actor.isHuman) {
+      this.floatText(actor.world.x, actor.world.y - 70, `Remote x${actor.stats.remoteCharges}`, '#d9b8ff');
+    }
+    if (!actor.isHuman && type !== 'crownSurge') {
+      AudioSystem.get().sfx('pickup');
+      return;
+    }
     switch (type as PowerUpType) {
       case 'crownSurge':
         this.crownBurst(actor);
@@ -1134,7 +1379,6 @@ export class GameScene extends Phaser.Scene {
       default:
         AudioSystem.get().sfx('pickup');
     }
-    this.floatText(actor.world.x, actor.world.y - 66, label, `#${color.toString(16).padStart(6, '0')}`);
   }
 
   private orbitRunes(actor: Player, color: number): void {
@@ -1276,10 +1520,16 @@ export class GameScene extends Phaser.Scene {
   private applyFrostZoneToActor(actor: Player): void {
     const key = keyOf(actor.grid);
     if (!this.frostZones.has(key) || this.frostZoneOwners.get(key) === actor.id || actor.frostImmunityMs > 0) return;
-    actor.snaredMs = 720;
-    actor.slowedMs = 2400;
-    actor.frostImmunityMs = 2900;
-    this.floatText(actor.world.x, actor.world.y - 50, 'Icebound - break free!', '#d8f7ff');
+    const resistance = actor.character === 'frost' ? 0.5 : 1;
+    actor.snaredMs = Math.round(720 * resistance);
+    actor.slowedMs = Math.round(2400 * resistance);
+    actor.frostImmunityMs = Math.round(2900 * resistance);
+    this.floatText(
+      actor.world.x,
+      actor.world.y - 50,
+      actor.character === 'frost' ? 'Frost resisted' : 'Icebound - break free!',
+      '#d8f7ff'
+    );
     this.specialPulse(actor, 0x75d7ff);
     this.animation.emitPickupBurst(actor, 0x75d7ff, 10);
     AudioSystem.get().sfx('frost');
@@ -1301,12 +1551,16 @@ export class GameScene extends Phaser.Scene {
   private dragonBlast(actor: Player): void {
     const direction = actor.lastDir.x === 0 && actor.lastDir.y === 0 ? { x: 0, y: 1 } : actor.lastDir;
     const tiles: GridPosition[] = [];
+    let blockedEndpoint: GridPosition | undefined;
     for (let step = 1; step <= 6; step += 1) {
       const tile = {
         x: actor.grid.x + direction.x * step,
         y: actor.grid.y + direction.y * step
       };
-      if (!this.grid.inBounds(tile) || this.grid.get(tile) !== 'empty') break;
+      if (!this.grid.inBounds(tile) || this.grid.get(tile) !== 'empty') {
+        if (this.grid.inBounds(tile)) blockedEndpoint = tile;
+        break;
+      }
       tiles.push(tile);
     }
 
@@ -1319,6 +1573,16 @@ export class GameScene extends Phaser.Scene {
     this.floatText(actor.world.x, actor.world.y - 54, `Dragon Blast - range ${tiles.length}`, '#ffb36b');
     this.specialPulse(actor, 0xff6a2b);
     const telegraph = this.dragonBlastFx.telegraph(actor.grid, tiles, direction);
+    if (blockedEndpoint) {
+      const blockedWorld = this.grid.toWorld(blockedEndpoint);
+      const stop = this.add.container(blockedWorld.x, blockedWorld.y);
+      stop.add(this.add.circle(0, 0, 18, 0x1b1110, 0.86).setStrokeStyle(3, 0xffb36b, 0.94));
+      stop.add(this.add.line(0, 0, -10, -10, 10, 10, 0xffd6a8, 0.95).setLineWidth(3));
+      stop.add(this.add.line(0, 0, 10, -10, -10, 10, 0xffd6a8, 0.95).setLineWidth(3));
+      this.effectLayer.add(stop);
+      this.tweens.add({ targets: stop, scale: 1.14, duration: 150, yoyo: true, repeat: 1 });
+      telegraph.push(stop);
+    }
     AudioSystem.get().sfx('tick');
 
     this.time.delayedCall(380, () => {
@@ -1354,38 +1618,175 @@ export class GameScene extends Phaser.Scene {
       else if (!canHopBlocks) break;
     }
     const from = this.grid.toWorld(actor.grid);
-    const shade = this.add.circle(from.x, from.y, 20, color, 0.18).setStrokeStyle(2, color, 0.48);
-    this.effectLayer.add(shade);
+    const shade = this.add.circle(from.x, from.y, 20, color, 0.12).setStrokeStyle(3, color, 0.74);
+    const departure = this.add.container(from.x, from.y);
+    for (let i = 0; i < 6; i += 1) {
+      departure.add(this.add.triangle(
+        Phaser.Math.Between(-12, 12),
+        Phaser.Math.Between(-14, 14),
+        -3,
+        8,
+        2,
+        -9,
+        5,
+        7,
+        color,
+        0.86
+      ).setAngle(Phaser.Math.Between(-55, 55)));
+    }
+    this.effectLayer.add([shade, departure]);
     actor.grid = landing;
     actor.world = this.grid.toWorld(landing);
     const to = actor.world;
     const trail = this.add.line(0, 0, from.x, from.y, to.x, to.y, color, 0.65).setLineWidth(5).setDepth(40);
-    this.tweens.add({ targets: [shade, trail], alpha: 0, duration: 420, onComplete: () => { shade.destroy(); trail.destroy(); } });
+    const landingFx = this.add.circle(to.x, to.y, 10, color, 0.16).setStrokeStyle(4, 0xf1e9ff, 0.92);
+    this.effectLayer.add(landingFx);
+    this.tweens.add({
+      targets: [shade, trail, departure],
+      alpha: 0,
+      scale: 1.45,
+      angle: 90,
+      duration: 420,
+      onComplete: () => {
+        shade.destroy();
+        trail.destroy();
+        departure.destroy(true);
+      }
+    });
+    this.tweens.add({ targets: landingFx, scale: 2.4, alpha: 0, duration: 360, onComplete: () => landingFx.destroy() });
     this.specialPulse(actor, color);
   }
 
   private spawnDecoy(actor: Player): void {
-    const texture = this.textures.exists(`champion-${actor.character}`) ? `champion-${actor.character}` : 'champion-fallback';
-    const decoy = this.add.image(actor.world.x, actor.world.y - 8, texture).setScale(0.22).setAlpha(0.45).setTint(0xd0a06a);
-    this.objectLayer.add(decoy);
-    this.tweens.add({ targets: decoy, alpha: 0, y: decoy.y - 8, duration: 4000, onComplete: () => decoy.destroy() });
+    if (actor.mirrorDecoyId) this.removeDecoy(actor.mirrorDecoyId, false);
+    const id = `mirror-${actor.id}-${Math.floor(this.time.now)}`;
+    const visual = this.add.container(actor.world.x, actor.world.y);
+    const shadow = this.add.ellipse(0, 18, 44, 14, 0x000000, 0.7);
+    const base = this.add.circle(0, 0, 24, 0x2a1b16, 1).setStrokeStyle(3, 0xd0a06a, 0.95);
+    const diamond = this.add.polygon(0, -2, [-12, 0, 0, -20, 12, 0, 0, 20], 0x8d5f39, 1)
+      .setStrokeStyle(2, 0xf1c08a, 0.95);
+    const eye = this.add.circle(0, -2, 6, 0xf1c08a, 1).setStrokeStyle(2, 0x1a1010, 1);
+    const label = this.add.text(0, 35, 'MIRROR SHADE', {
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+      fontSize: '9px',
+      color: '#f1c08a',
+      stroke: '#08080c',
+      strokeThickness: 2
+    }).setOrigin(0.5);
+    visual.add([shadow, base, diamond, eye, label]);
+    this.objectLayer.add(visual);
+    this.tweens.add({ targets: [diamond, eye], angle: 180, duration: 900, repeat: -1, ease: 'Sine.inOut' });
+    this.tweens.add({ targets: base, scale: 1.12, duration: 520, yoyo: true, repeat: -1 });
+
+    const target = new Player(
+      id,
+      'Mirror Shade',
+      actor.character,
+      { ...actor.grid },
+      { ...actor.world },
+      makeStats(actor.character),
+      false,
+      0xd0a06a,
+      0xf1c08a
+    );
+    target.stats.health = 1;
+    target.stats.maxHealth = 1;
+    this.mirrorDecoys.set(id, { ownerId: actor.id, target, visual, remainingMs: 4000 });
+    actor.mirrorDecoyId = id;
   }
 
-  private beastClaw(actor: Player): void {
-    const target = this.actors.filter((a) => a !== actor && a.alive).sort((a, b) => distance(actor.grid, a.grid) - distance(actor.grid, b.grid))[0];
-    if (!target) return;
-    const claw = this.add.circle(actor.world.x, actor.world.y, 10, 0x8bd56f, 0.9);
+  private removeDecoy(id: string, struck: boolean): void {
+    const decoy = this.mirrorDecoys.get(id);
+    if (!decoy) return;
+    this.mirrorDecoys.delete(id);
+    const owner = this.actors.find((actor) => actor.id === decoy.ownerId);
+    if (owner?.mirrorDecoyId === id) owner.mirrorDecoyId = undefined;
+    this.tweens.killTweensOf(decoy.visual);
+    this.tweens.add({
+      targets: decoy.visual,
+      scale: struck ? 1.45 : 0.7,
+      alpha: 0,
+      angle: struck ? 45 : 0,
+      duration: struck ? 180 : 280,
+      onComplete: () => decoy.visual.destroy(true)
+    });
+    if (struck) {
+      this.floatText(decoy.target.world.x, decoy.target.world.y - 44, 'MISDIRECTED', '#f1c08a');
+      this.animation.emitPickupBurst(owner ?? decoy.target, 0xd0a06a, 10);
+    }
+  }
+
+  private beastClaw(actor: Player, directional: boolean): void {
+    const range = 6;
+    let target: Player | undefined;
+    let endpoint = { ...actor.grid };
+    if (directional) {
+      for (let step = 1; step <= range; step += 1) {
+        const tile = {
+          x: actor.grid.x + actor.lastDir.x * step,
+          y: actor.grid.y + actor.lastDir.y * step
+        };
+        if (!this.grid.inBounds(tile) || this.grid.get(tile) !== 'empty') break;
+        endpoint = tile;
+        target = this.actors.find((candidate) =>
+          candidate !== actor && candidate.alive && sameTile(candidate.grid, tile)
+        );
+        if (target) break;
+      }
+    } else {
+      target = this.actors
+        .filter((candidate) => candidate !== actor && candidate.alive && distance(actor.grid, candidate.grid) <= range)
+        .sort((a, b) => distance(actor.grid, a.grid) - distance(actor.grid, b.grid))[0];
+      if (target) endpoint = { ...target.grid };
+      else {
+        this.floatText(actor.world.x, actor.world.y - 50, 'No prey in range', '#a8c89a');
+        return;
+      }
+    }
+
+    const destination = this.grid.toWorld(endpoint);
+    const claw = this.add.container(actor.world.x, actor.world.y);
+    const core = this.add.circle(0, 0, 12, 0x8bd56f, 0.72).setStrokeStyle(3, 0xd9ffd0, 0.9);
+    const slashA = this.add.line(0, 0, -12, 12, 8, -12, 0xd9ffd0, 0.9).setLineWidth(4);
+    const slashB = this.add.line(0, 0, -2, 14, 16, -9, 0x8bd56f, 0.82).setLineWidth(4);
+    claw.add([core, slashA, slashB]);
     this.effectLayer.add(claw);
     this.tweens.add({
       targets: claw,
-      x: target.world.x,
-      y: target.world.y,
-      duration: 420,
+      x: destination.x,
+      y: destination.y,
+      scale: 1.35,
+      angle: 40,
+      duration: 360,
       ease: 'Cubic.easeIn',
       onComplete: () => {
-        target.slowedMs = 2200;
-        if (distance(actor.grid, target.grid) <= 6) this.damageActor(target, actor.id);
-        claw.destroy();
+        if (target?.alive && distance(actor.grid, target.grid) <= range) {
+          target.slowedMs = 2200;
+          this.damageActor(target, actor.id);
+          this.animation.emitPickupBurst(target, 0x8bd56f, 12);
+          this.floatText(target.world.x, target.world.y - 54, 'BEASTSTRUCK', '#d9ffd0');
+        }
+        this.tweens.add({ targets: claw, alpha: 0, scale: 2, duration: 140, onComplete: () => claw.destroy(true) });
+      }
+    });
+  }
+
+  private frostActivation(actor: Player, wardenStrength: boolean): void {
+    const ring = this.add.circle(actor.world.x, actor.world.y + 8, 18, 0x75d7ff, 0.18)
+      .setStrokeStyle(wardenStrength ? 5 : 3, 0xd8f7ff, 0.92);
+    const shard = this.add.star(actor.world.x, actor.world.y + 4, 6, 6, wardenStrength ? 24 : 18, 0xd8f7ff, 0.8);
+    this.effectLayer.add([ring, shard]);
+    this.tweens.add({
+      targets: [ring, shard],
+      scale: wardenStrength ? 2.7 : 2.2,
+      alpha: 0,
+      angle: 90,
+      duration: 520,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        ring.destroy();
+        shard.destroy();
       }
     });
   }
@@ -1508,10 +1909,11 @@ export class GameScene extends Phaser.Scene {
 
   private grantSandboxPower(type: PowerUpType): void {
     const power = getPowerUp(type);
-    const label = power.apply(this.player.stats);
+    power.apply(this.player.stats);
+    if (isStoredPower(type)) this.player.storedPower = type;
     this.player.lastPowerUp = type;
     this.player.lastPowerUpMs = 4200;
-    this.applyPowerUpFeedback(this.player, type, label);
+    this.applyPowerUpFeedback(this.player, type);
     this.pulseHudForPower(type);
     this.redrawHealth(this.player);
     this.toggleSandboxLab();
@@ -1521,7 +1923,7 @@ export class GameScene extends Phaser.Scene {
     const modeDef = MODES.find((m) => m.id === SESSION.mode) ?? MODES[0];
     const bg = this.add.rectangle(640, 285, 700, 142, 0x0d0c12, 0.95).setStrokeStyle(2, this.grid.map.glow, 0.8);
     const accent = this.add.rectangle(640, 219, 660, 4, this.grid.map.glow, 0.8);
-    const text = this.add.text(640, 235, `${this.grid.map.name}  •  ${modeDef.name}`, {
+    const text = this.add.text(640, 235, `${this.grid.map.name}  |  ${modeDef.name}`, {
       fontFamily: 'Georgia',
       fontSize: '28px',
       color: '#f7d783'
@@ -1531,9 +1933,12 @@ export class GameScene extends Phaser.Scene {
       fontSize: '16px',
       color: '#f4ead2'
     }).setOrigin(0.5);
+    const controls = this.device.touch
+      ? 'JOYSTICK move   BOMB place rune   POWER special/cast   HEX remote'
+      : 'WASD move   SPACE bomb   SHIFT power/special   E remote';
     const hintText = SESSION.mode === 'sandbox'
-      ? 'Open RUNE LAB to apply any power | practice rival has 20 health\nT opens lab   WASD move   SPACE bomb   SHIFT special'
-      : 'Break blocks | collect runes | control the centre\nWASD move   SPACE bomb   SHIFT special   E remote';
+      ? `Open RUNE LAB to apply any power | practice rival has 20 health\n${this.device.touch ? 'Tap RUNE LAB' : 'T opens lab'}   ${controls}`
+      : `Break blocks | collect runes | control the centre\n${controls}`;
     const hint = this.add.text(640, 326, hintText, {
       fontFamily: 'Arial',
       fontSize: '14px', align: 'center', lineSpacing: 7,
@@ -1649,6 +2054,10 @@ export class GameScene extends Phaser.Scene {
     this.frostZones.clear();
     this.frostZoneOwners.clear();
     this.frostSprites.clear();
+    this.runeSightSprites.clear();
+    this.mirrorDecoys.clear();
+    this.storedPowerAim = undefined;
+    this.storedPowerAimKey = '';
     this.sandboxOpen = false;
     this.sandboxPanel = undefined;
     this.sandboxLauncher = undefined;

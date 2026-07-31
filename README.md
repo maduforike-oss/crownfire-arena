@@ -48,13 +48,13 @@ fallback but is no longer the primary menu flow.
 
 - `WASD`: move
 - `Space`: place rune bomb
-- `Shift`: use class special
+- `Shift`: release a stored Power rune; otherwise use the champion special
 - `E`: detonate the oldest armed Remote Hex bomb; armed bombs wait indefinitely
 - `Escape`: pause
 - Menus use mouse clicks.
 - `M`: toggle audio during a match
 - Player 2: arrows to move, `Enter` bomb, right `Shift` special, `P` remote
-- Phone/iPad: draggable virtual joystick plus Bomb, Power, Hex, and Pause controls
+- Phone/iPad: draggable virtual joystick plus Bomb, Power, Hex, and Pause controls. `HEX` only appears while a Remote Hex bomb is armed.
 - Bluetooth remote/gamepad: use **Controller Setup** on the title screen to view incoming iPad browser events and bind every action
 
 ## Play on iPad
@@ -84,7 +84,9 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Playable single-player arena combat against AI bots and optional local two-player
 - Smooth grid-aware movement
 - Rune bombs with fuse pulse, chain reactions, cross-shaped blasts, and destructible blocks
-- Power-up drops: Ember Rune, Twin Sigil, Wolf Sprint, Stoneguard Blessing, Dragonflame Core, Ghost Veil, Frost Snare, Raven Blink, Beast Call, Remote Hex, and Champion Surge
+- Passive/automatic runes: Ember Rune, Twin Sigil, Wolf Sprint, Stoneguard Blessing, Ghost Veil, Remote Hex, and rare Champion Surge
+- Stored Power runes: Dragonflame, Frostsnare, Raven Blink, and Beast Call; collect one, aim with movement/facing, then press Power
+- Champion Surge has an explicit 4.5% rune roll, activates on pickup, and grants nine seconds of blast immunity plus contact pressure
 - Eight selectable champions with large showcase portraits, stable layered animation, and themed special abilities
 - Classic Trial, Crown Shard Hunt, four-seat Rumble, and pressure-free Rune Sandbox modes
 - Legacy two-player same-WiFi relay retained for local development
@@ -100,10 +102,22 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Rune Lab for granting every real pickup, testing charges and timers, and sparring with a durable practice rival
 - Original procedural menu, results, and kingdom-specific battle scores with persistent mute and mix settings
 - Installable PWA manifest, landscape mobile metadata, offline runtime cache, and multi-touch controls
+- Easy, Normal, and Hard bot profiles preserve champion-specific health/speed traits while varying reaction, aggression, pickup, shrine, and special-use priorities
+- Fuse-aware bot routing models chain reactions, retains route targets between decisions, rejects unreachable pickups, and requires an escape route before bomb placement
+
+## Bot Simulation
+
+Run the deterministic-format headless tournament after AI or balance changes:
+
+```bash
+npm run test:bots -- 120
+```
+
+The harness rotates all eight champions through all four maps and all three difficulty profiles. It writes aggregate survival, bomb, self-hit, pickup, shrine, elimination, and win observations to `artifacts/bot-simulation-report.json`.
 
 ## Known Limitations
 
-- Bot AI uses a danger map, escape-path checks, rival targeting, block breaking, power-up seeking, centre pressure, and situational specials. It has one shared difficulty and no team tactics yet.
+- Bot AI now has explicit Easy, Normal, and Hard profiles and can fight every champion line-up. It does not yet coordinate teams or perform long-horizon opponent modelling.
 - Champion animation uses stable portrait-layer motion, glows, particles, squash/stretch, and facing flips; authored directional frame sheets remain a future art pass.
 - The score is generated with WebAudio rather than recorded orchestral stems.
 - Online room/session/persistence authority is server owned, while the existing Phaser host still runs the live combat simulation. Ranked integrity requires a headless server simulation.
@@ -114,7 +128,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 
 - Add bespoke sprite sheets and impact animation frames.
 - Expand Survival, Beast Royale, and Rune Dominion modes.
-- Add AI difficulty profiles, short-term tile reservations, and deeper opponent prediction.
+- Add short-term multi-bot tile reservations and deeper opponent prediction.
 - Add cosmetic unlock screen and more map hazards.
 
 ## Multiplayer Next Steps

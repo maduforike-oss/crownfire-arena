@@ -1,4 +1,12 @@
-import type { CharacterClass, EntityId, GridPosition, Stats, WorldPosition } from '../utils/types';
+import type {
+  ActionState,
+  CharacterClass,
+  EntityId,
+  GridPosition,
+  Stats,
+  StoredPowerType,
+  WorldPosition
+} from '../utils/types';
 import type { PowerUpType } from '../utils/types';
 
 export class Player {
@@ -17,6 +25,11 @@ export class Player {
   specialCooldownMs = 0;
   lastPowerUp?: PowerUpType;
   lastPowerUpMs = 0;
+  storedPower?: StoredPowerType;
+  actionState?: ActionState;
+  actionMs = 0;
+  frostTrailZoneMs = 0;
+  mirrorDecoyId?: string;
   lastDir = { x: 0, y: 1 };
 
   constructor(

@@ -36,6 +36,8 @@ export type PowerUpType =
   | 'beastCall'
   | 'remoteHex'
   | 'crownSurge';
+export type StoredPowerType = 'dragonCore' | 'frostSnare' | 'ravenBlink' | 'beastCall';
+export type ActionState = 'windup' | 'release' | 'recovery';
 export type GameMode = 'classic' | 'shards' | 'grand' | 'sandbox' | 'survival' | 'royale' | 'dominion';
 export type BotDifficulty = 'easy' | 'normal' | 'hard';
 export type BotState =

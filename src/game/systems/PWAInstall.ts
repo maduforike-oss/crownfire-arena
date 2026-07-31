@@ -4,6 +4,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 let deferredPrompt: BeforeInstallPromptEvent | undefined;
+const SERVICE_WORKER_VERSION = '9';
+const RELOAD_GUARD = `crowdfire-sw-reload-v${SERVICE_WORKER_VERSION}`;
 
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
@@ -27,7 +29,26 @@ export function registerServiceWorker(): void {
     return;
   }
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register(new URL('sw.js', document.baseURI).pathname).catch(() => undefined);
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    const workerUrl = new URL(`sw.js?v=${SERVICE_WORKER_VERSION}`, document.baseURI);
+    const workerScope = new URL('./', document.baseURI).pathname;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      try {
+        if (sessionStorage.getItem(RELOAD_GUARD)) return;
+        sessionStorage.setItem(RELOAD_GUARD, '1');
+        window.location.reload();
+      } catch {
+        // Safari private browsing can reject storage access. The new worker
+        // still controls the next navigation without requiring a hard failure.
+      }
+    }, { once: true });
+
+    void navigator.serviceWorker.register(workerUrl.href, {
+      scope: workerScope,
+      updateViaCache: 'none'
+    }).then((registration) => registration.update()).catch(() => undefined);
   });
 }
 

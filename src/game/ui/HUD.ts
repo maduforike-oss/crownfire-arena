@@ -75,14 +75,14 @@ export class HUD {
     this.scene.add.rectangle(640, 32, 980, 58, 0x090a10, 0.94)
       .setStrokeStyle(2, 0xd8a84e, 0.52)
       .setDepth(100);
-    this.health = this.scene.add.text(220, 21, '', {
+    this.health = this.scene.add.text(210, 21, '', {
       fontFamily: 'Georgia', fontSize: '20px', color: '#f7d783'
     }).setOrigin(0.5).setDepth(101);
-    this.stats = this.scene.add.text(350, 20, '', {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#f4ead2', align: 'center'
+    this.stats = this.scene.add.text(325, 20, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '13px', color: '#f4ead2', align: 'center'
     }).setOrigin(0.5).setDepth(101);
-    this.shards = this.scene.add.text(465, 20, '', {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#9ec8ff'
+    this.shards = this.scene.add.text(430, 20, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '13px', color: '#9ec8ff'
     }).setOrigin(0.5).setDepth(101);
     const compactObjective = mode.id === 'sandbox'
       ? 'Test every rune in the lab'
@@ -90,33 +90,35 @@ export class HUD {
         ? 'Eliminate all rivals'
         : mode.id === 'shards'
           ? 'Collect 10 Crown Shards'
+          : mode.id === 'grand'
+            ? 'Rumble: last champion standing'
           : mode.objective;
-    this.objective = this.scene.add.text(640, 22, compactObjective, {
-      fontFamily: 'Georgia', fontSize: '13px', color: '#f4ead2', align: 'center', wordWrap: { width: 285 }
+    this.objective = this.scene.add.text(585, 20, compactObjective, {
+      fontFamily: 'Georgia', fontSize: '13px', color: '#f4ead2', align: 'center', wordWrap: { width: 220 }
     }).setOrigin(0.5).setDepth(101);
-    this.special = this.scene.add.text(825, 17, '', {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#eadcff', align: 'center'
+    this.special = this.scene.add.text(760, 17, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#eadcff', align: 'center'
     }).setOrigin(0.5).setDepth(101);
-    this.specialBar = this.scene.add.rectangle(770, 45, 110, 4, 0xa974ff, 0.95)
+    this.specialBar = this.scene.add.rectangle(705, 45, 110, 4, 0xa974ff, 0.95)
       .setOrigin(0, 0.5)
       .setDepth(101);
-    this.specialHint = this.scene.add.text(825, 53, '', {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '8px', color: '#a99eb4', align: 'center'
+    this.specialHint = this.scene.add.text(760, 53, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: '#a99eb4', align: 'center'
     }).setOrigin(0.5).setDepth(101);
-    this.bots = this.scene.add.text(945, 18, '', {
-      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#bad7ff'
+    this.bots = this.scene.add.text(905, 18, '', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '12px', color: '#bad7ff'
     }).setOrigin(0.5).setDepth(101);
-    this.timer = this.scene.add.text(1025, 40, '', {
+    this.timer = this.scene.add.text(1010, 39, '', {
       fontFamily: 'Georgia', fontSize: '20px', color: '#f4ead2'
     }).setOrigin(0.5).setDepth(101);
-    this.powerIcon = this.scene.add.image(495, 46, 'power-fallback')
-      .setDisplaySize(28, 28)
+    this.powerIcon = this.scene.add.image(520, 46, 'power-fallback')
+      .setDisplaySize(22, 22)
       .setAlpha(0.45)
       .setDepth(101);
-    this.powerText = this.scene.add.text(516, 46, 'NO RUNE', {
+    this.powerText = this.scene.add.text(535, 46, 'NO RUNE', {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: '#958a78'
     }).setOrigin(0, 0.5).setDepth(101);
-    this.activePanel = this.scene.add.container(640, 82).setDepth(104);
+    this.activePanel = this.scene.add.container(112, 170).setDepth(104);
   }
 
   update(player: Player, livingBots: number, elapsedMs: number): void {
@@ -130,15 +132,20 @@ export class HUD {
     const seconds = Math.floor(elapsedMs / 1000);
     this.timer.setText(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
     const cooldown = Math.max(0, player.specialCooldownMs);
-    this.special.setText(cooldown > 0
-      ? `${character.specialName}${this.compact ? ' ' : '\n'}${Math.ceil(cooldown / 1000)}s`
-      : `${character.specialName}${this.compact ? ' ' : '\n'}READY`);
+    const storedPower = player.storedPower ? getPowerUp(player.storedPower) : undefined;
+    this.special.setText(storedPower
+      ? `${storedPower.name}${this.compact ? ' ' : '\n'}STORED`
+      : cooldown > 0
+        ? `${character.specialName}${this.compact ? ' ' : '\n'}${Math.ceil(cooldown / 1000)}s`
+        : `${character.specialName}${this.compact ? ' ' : '\n'}READY`);
     const cooldownMax = player.character === 'wolf' ? 7000 : player.character === 'raven' ? 8000 : player.character === 'dragon' || player.character === 'frost' ? 10000 : 12000;
     const specialWidth = this.compact ? 110 : 164;
-    this.specialBar.displayWidth = specialWidth * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
-    this.specialBar.setFillStyle(cooldown > 0 ? 0x6d4b88 : character.accentColor);
+    this.specialBar.displayWidth = storedPower ? specialWidth : specialWidth * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
+    this.specialBar.setFillStyle(storedPower?.color ?? (cooldown > 0 ? 0x6d4b88 : character.accentColor));
     this.specialHint.setText(
-      player.character === 'dragon'
+      storedPower
+        ? this.compact ? 'POWER TO RELEASE' : 'POWER / SHIFT TO RELEASE'
+        : player.character === 'dragon'
         ? this.compact ? 'LINE R6' : 'FACING LINE  •  RANGE 6'
         : player.character === 'frost'
           ? this.compact ? 'ICE TRAIL 5s' : 'MOVE TO LAY ICE  •  5s'
@@ -175,6 +182,15 @@ export class HUD {
   private renderActiveEffects(player: Player): void {
     this.activePanel.removeAll(true);
     const effects: ActiveEffectViewModel[] = [];
+    if (player.storedPower) {
+      const stored = getPowerUp(player.storedPower);
+      effects.push({
+        icon: stored.assetKey,
+        label: stored.name,
+        color: stored.color,
+        description: this.compact ? 'POWER' : 'Stored - press Power'
+      });
+    }
     if (player.stats.shielded) effects.push({ icon: 'power-stoneguard', label: 'Shield', color: 0xf7d783, remainingMs: player.stats.shieldMs, description: 'Absorbs the next hit' });
     if (player.stats.remoteCharges > 0 || player.stats.remoteArmedBombs > 0) effects.push({
         icon: 'power-remoteHex',
@@ -200,20 +216,21 @@ export class HUD {
 
     effects.slice(0, 5).forEach((effect, index) => {
       if (this.compact) {
-        const count = Math.min(5, effects.length);
-        const x = (index - (count - 1) / 2) * 132;
-        const panel = this.scene.add.rectangle(x, 0, 124, 34, 0x10121a, 0.95).setStrokeStyle(1, effect.color, 0.58);
-        const icon = this.scene.add.image(x - 43, 0, this.scene.textures.exists(effect.icon) ? effect.icon : 'power-fallback').setDisplaySize(28, 28);
+        const y = index * 40;
+        const panel = this.scene.add.rectangle(0, y, 132, 36, 0x10121a, 0.96).setStrokeStyle(1, effect.color, 0.62);
+        const icon = this.scene.add.image(-46, y, this.scene.textures.exists(effect.icon) ? effect.icon : 'power-fallback').setDisplaySize(28, 28);
         const suffix = effect.remainingMs !== undefined
           ? `${Math.ceil(effect.remainingMs / 1000)}s`
           : effect.charges !== undefined
             ? `x${effect.charges}`
-            : 'NEXT';
-        const text = this.scene.add.text(x - 24, -6, effect.label, {
-          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: `#${effect.color.toString(16).padStart(6, '0')}`
+            : effect.description === 'POWER'
+              ? 'POWER'
+              : 'NEXT';
+        const text = this.scene.add.text(-27, y - 7, effect.label, {
+          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: `#${effect.color.toString(16).padStart(6, '0')}`
         });
-        const detail = this.scene.add.text(x - 24, 7, suffix, {
-          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '9px', color: '#f4ead2'
+        const detail = this.scene.add.text(-27, y + 7, suffix, {
+          fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: '#f4ead2'
         });
         this.activePanel.add([panel, icon, text, detail]);
         return;
