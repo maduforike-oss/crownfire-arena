@@ -4,8 +4,12 @@ import type { Player } from '../entities/Player';
 import { getCharacter } from '../config/Characters';
 import { getPowerUp } from '../config/PowerUps';
 import type { CharacterClass } from '../utils/types';
+import { GAME_CONFIG } from '../config/GameConfig';
 import {
+  animationDurationMs,
+  CHAMPION_POSES,
   getChampionAnimation,
+  type AuthoredFacing,
   type ChampionAnimationState
 } from '../config/ChampionAnimations';
 
@@ -39,10 +43,10 @@ export interface ActorVisual {
   buffAura: Phaser.GameObjects.Arc;
   shieldAura: Phaser.GameObjects.Arc;
   shadow: Phaser.GameObjects.Ellipse;
-  baseScale: number;
-  spriteSize: number;
-  spriteWidth: number;
-  frameAnimated: boolean;
+  spriteBaseY: number;
+  spriteBaseScaleX: number;
+  spriteBaseScaleY: number;
+  poseFrame: number;
   state: AnimationState;
   lastX: number;
   lastY: number;
@@ -50,6 +54,8 @@ export interface ActorVisual {
   damageFlashUntil: number;
   animationStartedAt: number;
   actionUntil: number;
+  actionWasActive: boolean;
+  settleUntil: number;
 }
 
 export class AnimationSystem {
@@ -58,7 +64,9 @@ export class AnimationSystem {
   createActorVisual(actor: Player): ActorVisual {
     const character = getCharacter(actor.character);
     const animation = getChampionAnimation(actor.character);
-    const texture = this.scene.textures.exists(animation.textureKey) ? animation.textureKey : character.assetKey;
+    const texture = this.scene.textures.exists(animation.directional.down.textureKey)
+      ? animation.directional.down.textureKey
+      : character.assetKey;
     const c = this.scene.add.container(actor.world.x, actor.world.y);
     const profile = MOTION[actor.character];
     const shadow = this.scene.add.ellipse(0, 24, actor.isHuman ? 48 : 44, actor.isHuman ? 15 : 14, 0x000000, 0.7);
@@ -67,14 +75,11 @@ export class AnimationSystem {
     const shieldAura = this.scene.add.circle(0, 0, 32, 0xf7d783, 0).setStrokeStyle(3, 0xf7d783, 0);
     const ring = this.scene.add.circle(0, 0, 25, actor.accent, 0.13).setStrokeStyle(2, actor.accent, actor.isHuman ? 0.86 : 0.38);
     const marker = actor.isHuman ? this.scene.add.triangle(0, -58, -10, 0, 10, 0, 0, -14, actor.accent, 1) : this.scene.add.circle(0, -51, 5, actor.accent, 0.8);
-    const baseScale = 1;
-    const visibleHeight = actor.isHuman ? 100 : 96;
-    const spriteSize = visibleHeight / (animation.artBaseline - animation.artTop);
-    const spriteWidth = spriteSize * animation.widthRatio;
-    const initialFrame = animation.sourceType === 'spritesheet' ? 0 : undefined;
-    const sprite = this.scene.add.image(0, 37, texture, initialFrame)
+    const spriteDisplaySize = 128;
+    const spriteBaseY = 37;
+    const sprite = this.scene.add.image(0, spriteBaseY, texture)
       .setOrigin(animation.anchorX, animation.artBaseline)
-      .setDisplaySize(spriteWidth, spriteSize);
+      .setDisplaySize(spriteDisplaySize, spriteDisplaySize);
     const motion = this.scene.add.container(0, -13, [sprite]);
     const label = this.scene.add.text(0, 52, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
       fontFamily: 'Georgia',
@@ -97,34 +102,43 @@ export class AnimationSystem {
       buffAura,
       shieldAura,
       shadow,
-      baseScale,
-      spriteSize,
-      spriteWidth,
-      frameAnimated: animation.sourceType === 'spritesheet',
+      spriteBaseY,
+      spriteBaseScaleX: sprite.scaleX,
+      spriteBaseScaleY: sprite.scaleY,
+      poseFrame: 0,
       state: 'idle_down',
       lastX: actor.world.x,
       lastY: actor.world.y,
       lastParticleAt: 0,
       damageFlashUntil: 0,
       animationStartedAt: this.scene.time.now,
-      actionUntil: 0
+      actionUntil: 0,
+      actionWasActive: false,
+      settleUntil: 0
     };
   }
 
   updateActor(actor: Player, visual: ActorVisual, moving: boolean, direction: Direction): void {
-    const actionActive = this.scene.time.now < visual.actionUntil;
+    const now = this.scene.time.now;
+    const actionActive = now < visual.actionUntil;
+    if (visual.actionWasActive && !actionActive && actor.alive) {
+      visual.settleUntil = now + 120;
+    }
+    visual.actionWasActive = actionActive;
     const state = !actor.alive
       ? 'defeated'
       : actionActive
         ? visual.state
-        : this.resolveState(actor, moving, direction);
+        : now < visual.settleUntil
+          ? 'idle_down'
+          : this.resolveState(actor, moving, direction);
     if (visual.state !== state) {
       visual.state = state;
       this.enterState(actor, visual, state);
     }
     visual.body.setPosition(actor.world.x, actor.world.y);
     visual.body.setDepth(20 + actor.world.y / 1000);
-    visual.body.setAlpha(actor.alive ? 1 : 0.34);
+    visual.body.setAlpha(1);
     visual.ring.setAlpha(actor.stats.shielded ? 0.65 : actor.isHuman ? 0.22 : 0.12);
     visual.aura.setScale(actor.stats.temporaryGhostMode > 0 ? 1.28 : 1 + Math.sin(this.scene.time.now / 360) * 0.035);
     visual.aura.setAlpha(actor.stats.temporaryGhostMode > 0 ? 0.28 : actor.isHuman ? 0.12 : 0.07);
@@ -137,26 +151,13 @@ export class AnimationSystem {
     else if (actor.stats.championSurgeMs > 0) visual.sprite.setTint(0xfff0a0);
     else if (actor.stats.temporaryGhostMode > 0) visual.sprite.setTint(0xe8ddff);
     else visual.sprite.setTint(0xffffff);
-    visual.sprite.setFlipX(direction === 'left');
-    visual.sprite.setDisplaySize(visual.spriteWidth, visual.spriteSize);
-    this.updateAnimationFrame(actor, visual);
-    if (actor.actionState === 'windup') {
-      visual.motion.setScale(0.96, 1.04).setAngle(direction === 'left' ? -2 : 2);
-    } else if (actor.actionState === 'release') {
-      visual.motion.setScale(1.05, 0.96).setAngle(direction === 'left' ? 4 : -4);
-    } else if (actor.actionState === 'recovery') {
-      visual.motion.setScale(1.01, 0.99).setAngle(0);
-    } else if (moving && actor.stats.temporarySpeedBoost > 0) {
-      visual.motion.setScale(1.04, 0.97).setAngle(direction === 'left' ? -4 : direction === 'right' ? 4 : 0);
-    } else {
-      visual.motion.setScale(1).setAngle(0);
-    }
-    const contactFrame = visual.frameAnimated
-      ? Number(visual.sprite.frame.name) || 0
-      : Math.floor(this.scene.time.now / MOTION[actor.character].cadence);
+    this.updateAnimationPose(actor, visual);
+    const walkContacts = [1, 0.88, 0.95, 1, 0.88, 0.95];
     const contact = visual.state.startsWith('walk')
-      ? 0.9 + contactFrame % 2 * 0.08
-      : 1;
+      ? walkContacts[visual.poseFrame] ?? 1
+      : visual.state === 'defeated'
+        ? 1 + visual.poseFrame * 0.06
+        : 1;
     visual.shadow.setScale(actor.stats.championSurgeMs > 0 ? 1.18 : contact, contact);
     visual.shadow.setAlpha(actor.invulnerableMs > 0 ? 0.52 : 0.7);
     if (moving && this.scene.time.now - visual.lastParticleAt > MOTION[actor.character].cadence * 1.7) {
@@ -170,7 +171,9 @@ export class AnimationSystem {
   playPlaceBomb(actor: Player, visual: ActorVisual): void {
     visual.state = 'place_bomb';
     visual.animationStartedAt = this.scene.time.now;
-    visual.actionUntil = this.scene.time.now + 330;
+    visual.actionUntil = this.scene.time.now + animationDurationMs(actor.character, 'place');
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
     visual.motion.setScale(1).setAngle(0).setY(-13);
     this.emitFactionParticles(actor, actor.world.x, actor.world.y + 8, 5);
   }
@@ -187,23 +190,28 @@ export class AnimationSystem {
     this.emitFactionParticles(actor, actor.world.x, actor.world.y + 4, 9);
     visual.state = 'special';
     visual.animationStartedAt = this.scene.time.now;
-    visual.actionUntil = this.scene.time.now + 480;
+    visual.actionUntil = this.scene.time.now + animationDurationMs(actor.character, 'special');
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
   }
 
   playDamaged(actor: Player, visual: ActorVisual): void {
     visual.state = 'damaged';
     visual.damageFlashUntil = this.scene.time.now + 320;
     visual.animationStartedAt = this.scene.time.now;
-    visual.actionUntil = this.scene.time.now + 250;
+    visual.actionUntil = this.scene.time.now + animationDurationMs(actor.character, 'damaged');
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
     const tint = actor.character === 'frost' ? 0xd8f7ff : actor.character === 'veil' ? 0xf0d8ff : actor.character === 'dragon' ? 0xff6a2b : 0xffffff;
     visual.sprite.setTint(tint);
-    this.scene.tweens.add({ targets: visual.sprite, alpha: 0.45, duration: 70, yoyo: true, repeat: 2, onComplete: () => visual.sprite.clearTint().setAlpha(1) });
   }
 
   playDefeated(actor: Player, visual: ActorVisual): void {
     visual.state = 'defeated';
     visual.animationStartedAt = this.scene.time.now;
     visual.actionUntil = Number.POSITIVE_INFINITY;
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
   }
 
   emitFootstep(actor: Player): void {
@@ -245,19 +253,18 @@ export class AnimationSystem {
 
   private resolveState(actor: Player, moving: boolean, direction: Direction): AnimationState {
     if (!actor.alive) return 'defeated';
+    if (!moving) return 'idle_down';
     const suffix = direction === 'none' ? 'down' : direction;
-    return `${moving ? 'walk' : 'idle'}_${suffix}` as AnimationState;
+    return `walk_${suffix}` as AnimationState;
   }
 
-  private enterState(actor: Player, visual: ActorVisual, state: AnimationState): void {
+  private enterState(_actor: Player, visual: ActorVisual, _state: AnimationState): void {
     this.scene.tweens.killTweensOf(visual.motion);
-    visual.motion.setScale(1).setAngle(0).setPosition(0, actor.character === 'veil' ? -16 : -13);
-    visual.sprite.setDisplaySize(visual.spriteWidth, visual.spriteSize);
+    visual.motion.setScale(1).setAngle(0).setPosition(0, -13);
     visual.animationStartedAt = this.scene.time.now;
   }
 
-  private updateAnimationFrame(actor: Player, visual: ActorVisual): void {
-    if (!visual.frameAnimated) return;
+  private updateAnimationPose(actor: Player, visual: ActorVisual): void {
     const animation = getChampionAnimation(actor.character);
     const state = this.frameState(visual.state);
     const range = animation.states[state];
@@ -265,7 +272,31 @@ export class AnimationSystem {
     const count = range.end - range.start + 1;
     const raw = Math.floor(elapsed / range.frameMs);
     const offset = range.loop ? raw % count : Math.min(count - 1, raw);
-    visual.sprite.setFrame(range.start + offset);
+    visual.poseFrame = offset;
+
+    const facing = this.presentationFacing(visual.state);
+    const authored: AuthoredFacing = facing === 'left' ? 'right' : facing;
+    const asset = animation.directional[authored];
+    if (visual.sprite.texture.key !== asset.textureKey) visual.sprite.setTexture(asset.textureKey);
+
+    const pose = CHAMPION_POSES[state][offset] ?? CHAMPION_POSES[state][0];
+    const mirror = facing === 'left' ? -1 : 1;
+    visual.sprite
+      .setPosition(
+        pose.xPercent / 100 * GAME_CONFIG.tileSize * mirror,
+        visual.spriteBaseY + pose.yPercent / 100 * GAME_CONFIG.tileSize
+      )
+      .setAngle(pose.angle * mirror)
+      .setScale(visual.spriteBaseScaleX, visual.spriteBaseScaleY * pose.scaleY)
+      .setFlipX(facing === 'left')
+      .setAlpha(1);
+  }
+
+  private presentationFacing(state: AnimationState): Exclude<Direction, 'none'> {
+    if (state === 'walk_left') return 'left';
+    if (state === 'walk_right') return 'right';
+    if (state === 'walk_up') return 'up';
+    return 'down';
   }
 
   private frameState(state: AnimationState): ChampionAnimationState {

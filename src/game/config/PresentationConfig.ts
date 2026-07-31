@@ -57,8 +57,8 @@ export const PRESENTATION: PresentationConfig = {
 };
 
 export const CHAMPION_ANIMATION: ChampionAnimationSet = {
-  frameWidth: 128,
-  frameHeight: 128,
+  frameWidth: 256,
+  frameHeight: 256,
   idleFrames: 4,
   walkFrames: 6,
   placeFrames: 4,

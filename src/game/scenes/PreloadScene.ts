@@ -48,14 +48,8 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('map-ashen-premium-floor-glow', 'assets/maps/ashen/premium_floor_glow.webp');
     for (const character of CHARACTERS) this.load.image(character.assetKey, character.portraitPath);
     for (const animation of Object.values(CHAMPION_ANIMATIONS)) {
-      if (animation.sourceType === 'spritesheet' && animation.frameWidth && animation.frameHeight) {
-        this.load.spritesheet(animation.textureKey, animation.path, {
-          frameWidth: animation.frameWidth,
-          frameHeight: animation.frameHeight
-        });
-      } else {
-        this.load.image(animation.textureKey, animation.path);
-      }
+      this.load.image(animation.directional.right.textureKey, animation.directional.right.path);
+      this.load.image(animation.directional.up.textureKey, animation.directional.up.path);
     }
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);
@@ -76,6 +70,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.applyChampionTextureFiltering();
     this.makeReferenceArenaFrames();
     this.makeChampionFallback();
     this.makePowerFallback();
@@ -97,6 +92,16 @@ export class PreloadScene extends Phaser.Scene {
       }
     }
     this.scene.start('MainMenuScene');
+  }
+
+  private applyChampionTextureFiltering(): void {
+    for (const animation of Object.values(CHAMPION_ANIMATIONS)) {
+      for (const asset of Object.values(animation.directional)) {
+        if (this.textures.exists(asset.textureKey)) {
+          this.textures.get(asset.textureKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
+      }
+    }
   }
 
   private makeReferenceArenaFrames(): void {
