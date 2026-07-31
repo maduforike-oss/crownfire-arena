@@ -48,10 +48,14 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('map-ashen-premium-floor-glow', 'assets/maps/ashen/premium_floor_glow.webp');
     for (const character of CHARACTERS) this.load.image(character.assetKey, character.portraitPath);
     for (const animation of Object.values(CHAMPION_ANIMATIONS)) {
-      this.load.spritesheet(animation.textureKey, animation.path, {
-        frameWidth: animation.frameWidth,
-        frameHeight: animation.frameHeight
-      });
+      if (animation.sourceType === 'spritesheet' && animation.frameWidth && animation.frameHeight) {
+        this.load.spritesheet(animation.textureKey, animation.path, {
+          frameWidth: animation.frameWidth,
+          frameHeight: animation.frameHeight
+        });
+      } else {
+        this.load.image(animation.textureKey, animation.path);
+      }
     }
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);

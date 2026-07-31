@@ -41,6 +41,8 @@ export interface ActorVisual {
   shadow: Phaser.GameObjects.Ellipse;
   baseScale: number;
   spriteSize: number;
+  spriteWidth: number;
+  frameAnimated: boolean;
   state: AnimationState;
   lastX: number;
   lastY: number;
@@ -66,8 +68,13 @@ export class AnimationSystem {
     const ring = this.scene.add.circle(0, 0, 25, actor.accent, 0.13).setStrokeStyle(2, actor.accent, actor.isHuman ? 0.86 : 0.38);
     const marker = actor.isHuman ? this.scene.add.triangle(0, -58, -10, 0, 10, 0, 0, -14, actor.accent, 1) : this.scene.add.circle(0, -51, 5, actor.accent, 0.8);
     const baseScale = 1;
-    const spriteSize = actor.isHuman ? 118 : 108;
-    const sprite = this.scene.add.image(0, 0, texture, 0).setDisplaySize(spriteSize, spriteSize);
+    const visibleHeight = actor.isHuman ? 100 : 96;
+    const spriteSize = visibleHeight / (animation.artBaseline - animation.artTop);
+    const spriteWidth = spriteSize * animation.widthRatio;
+    const initialFrame = animation.sourceType === 'spritesheet' ? 0 : undefined;
+    const sprite = this.scene.add.image(0, 37, texture, initialFrame)
+      .setOrigin(animation.anchorX, animation.artBaseline)
+      .setDisplaySize(spriteWidth, spriteSize);
     const motion = this.scene.add.container(0, -13, [sprite]);
     const label = this.scene.add.text(0, 52, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
       fontFamily: 'Georgia',
@@ -92,6 +99,8 @@ export class AnimationSystem {
       shadow,
       baseScale,
       spriteSize,
+      spriteWidth,
+      frameAnimated: animation.sourceType === 'spritesheet',
       state: 'idle_down',
       lastX: actor.world.x,
       lastY: actor.world.y,
@@ -129,7 +138,7 @@ export class AnimationSystem {
     else if (actor.stats.temporaryGhostMode > 0) visual.sprite.setTint(0xe8ddff);
     else visual.sprite.setTint(0xffffff);
     visual.sprite.setFlipX(direction === 'left');
-    visual.sprite.setDisplaySize(visual.spriteSize, visual.spriteSize);
+    visual.sprite.setDisplaySize(visual.spriteWidth, visual.spriteSize);
     this.updateAnimationFrame(actor, visual);
     if (actor.actionState === 'windup') {
       visual.motion.setScale(0.96, 1.04).setAngle(direction === 'left' ? -2 : 2);
@@ -142,8 +151,11 @@ export class AnimationSystem {
     } else {
       visual.motion.setScale(1).setAngle(0);
     }
+    const contactFrame = visual.frameAnimated
+      ? Number(visual.sprite.frame.name) || 0
+      : Math.floor(this.scene.time.now / MOTION[actor.character].cadence);
     const contact = visual.state.startsWith('walk')
-      ? 0.9 + Number(visual.sprite.frame.name) % 2 * 0.08
+      ? 0.9 + contactFrame % 2 * 0.08
       : 1;
     visual.shadow.setScale(actor.stats.championSurgeMs > 0 ? 1.18 : contact, contact);
     visual.shadow.setAlpha(actor.invulnerableMs > 0 ? 0.52 : 0.7);
@@ -240,11 +252,12 @@ export class AnimationSystem {
   private enterState(actor: Player, visual: ActorVisual, state: AnimationState): void {
     this.scene.tweens.killTweensOf(visual.motion);
     visual.motion.setScale(1).setAngle(0).setPosition(0, actor.character === 'veil' ? -16 : -13);
-    visual.sprite.setDisplaySize(visual.spriteSize, visual.spriteSize);
+    visual.sprite.setDisplaySize(visual.spriteWidth, visual.spriteSize);
     visual.animationStartedAt = this.scene.time.now;
   }
 
   private updateAnimationFrame(actor: Player, visual: ActorVisual): void {
+    if (!visual.frameAnimated) return;
     const animation = getChampionAnimation(actor.character);
     const state = this.frameState(visual.state);
     const range = animation.states[state];
