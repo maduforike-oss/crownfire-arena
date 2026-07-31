@@ -4,7 +4,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 let deferredPrompt: BeforeInstallPromptEvent | undefined;
-const SERVICE_WORKER_VERSION = '9';
+const SERVICE_WORKER_VERSION = '10';
 const RELOAD_GUARD = `crowdfire-sw-reload-v${SERVICE_WORKER_VERSION}`;
 
 window.addEventListener('beforeinstallprompt', (event) => {
