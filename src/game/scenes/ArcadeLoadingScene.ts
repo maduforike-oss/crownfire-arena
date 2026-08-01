@@ -12,7 +12,13 @@ export class ArcadeLoadingScene extends Phaser.Scene {
     super('ArcadeLoadingScene');
   }
 
+  init(): void {
+    // Phaser reuses scene instances. Reset transition state for every rematch.
+    this.leaving = false;
+  }
+
   create(): void {
+    this.cameras.main.resetFX();
     AudioSystem.get().startMusic('menu');
     const map = MAPS.find((item) => item.id === SESSION.map) ?? MAPS[0];
     const champion = getCharacter(SESSION.character);
