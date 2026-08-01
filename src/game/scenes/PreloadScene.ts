@@ -5,6 +5,7 @@ import { CHARACTERS } from '../config/Characters';
 import { MAPS } from '../config/Maps';
 import { BOMB_VISUAL_THEMES } from '../config/BombVisualThemes';
 import { getMapTheme } from '../config/MapThemes';
+import { DRAGON_ARCADE_FRAME_ASSETS } from '../config/DragonArcadeAnimations';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -53,6 +54,7 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(animation.directional.right.textureKey, animation.directional.right.path);
       this.load.image(animation.directional.up.textureKey, animation.directional.up.path);
     }
+    for (const frame of DRAGON_ARCADE_FRAME_ASSETS) this.load.image(frame.textureKey, frame.path);
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);
     }
@@ -102,6 +104,11 @@ export class PreloadScene extends Phaser.Scene {
         if (this.textures.exists(asset.textureKey)) {
           this.textures.get(asset.textureKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
         }
+      }
+    }
+    for (const frame of DRAGON_ARCADE_FRAME_ASSETS) {
+      if (this.textures.exists(frame.textureKey)) {
+        this.textures.get(frame.textureKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
       }
     }
   }

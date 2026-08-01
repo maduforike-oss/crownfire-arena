@@ -1132,6 +1132,7 @@ export class GameScene extends Phaser.Scene {
     if (view) this.animation.playArcadeAction(
       actor,
       view,
+      kind,
       this.arcadeFacingDirection(actor),
       weapon.color,
       windup,

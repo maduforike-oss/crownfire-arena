@@ -33,9 +33,9 @@ export const ARCADE_WEAPONS: Record<CharacterClass, ArcadeWeaponDef> = {
     character: 'dragon', role: 'Lane bruiser', name: 'Crownfire Longsword', attackName: 'Cinder Cut',
     secondaryName: 'Royal Brand', signatureName: 'Dragon Blast', style: 'blade', color: 0xff6a2b,
     highlight: 0xffd56a, range: 1, secondaryRange: 2, signatureRange: 6, attackCooldownMs: 620,
-    secondaryCooldownMs: 3200, signatureCooldownMs: 10000, activeMs: 0, primaryWindupMs: 145,
-    primaryRecoveryMs: 210, secondaryWindupMs: 330, secondaryRecoveryMs: 390,
-    signatureWindupMs: 560, signatureRecoveryMs: 620
+    secondaryCooldownMs: 3200, signatureCooldownMs: 10000, activeMs: 0, primaryWindupMs: 170,
+    primaryRecoveryMs: 530, secondaryWindupMs: 330, secondaryRecoveryMs: 390,
+    signatureWindupMs: 520, signatureRecoveryMs: 800
   },
   wolf: {
     character: 'wolf', role: 'Mobile marksman', name: 'Moonsteel Bow', attackName: 'Quickfang',

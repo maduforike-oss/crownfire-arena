@@ -12,6 +12,7 @@ import {
   type AuthoredFacing,
   type ChampionAnimationState
 } from '../config/ChampionAnimations';
+import { getDragonArcadeFrames, type DragonArcadeFrame } from '../config/DragonArcadeAnimations';
 
 interface MotionProfile {
   idleBob: number;
@@ -57,6 +58,8 @@ export interface ActorVisual {
   actionWasActive: boolean;
   settleUntil: number;
   actionFacing: Exclude<Direction, 'none'>;
+  arcadeFrames?: readonly DragonArcadeFrame[];
+  arcadeAnimationStartedAt: number;
 }
 
 export class AnimationSystem {
@@ -119,7 +122,8 @@ export class AnimationSystem {
       actionUntil: 0,
       actionWasActive: false,
       settleUntil: 0,
-      actionFacing: 'down'
+      actionFacing: 'down',
+      arcadeAnimationStartedAt: 0
     };
   }
 
@@ -205,6 +209,7 @@ export class AnimationSystem {
   playArcadeAction(
     actor: Player,
     visual: ActorVisual,
+    kind: 'primary' | 'secondary' | 'signature',
     facing: Exclude<Direction, 'none'>,
     color: number,
     windupMs: number,
@@ -218,6 +223,10 @@ export class AnimationSystem {
           ? { x: -1, y: 0 }
           : { x: 1, y: 0 };
     visual.actionFacing = facing;
+    visual.arcadeFrames = actor.character === 'dragon' && kind !== 'secondary'
+      ? getDragonArcadeFrames(kind, facing)
+      : undefined;
+    visual.arcadeAnimationStartedAt = this.scene.time.now;
     visual.state = 'special';
     visual.animationStartedAt = this.scene.time.now;
     visual.actionUntil = this.scene.time.now + windupMs + recoveryMs;
@@ -331,13 +340,18 @@ export class AnimationSystem {
     return `walk_${suffix}` as AnimationState;
   }
 
-  private enterState(_actor: Player, visual: ActorVisual, _state: AnimationState): void {
+  private enterState(_actor: Player, visual: ActorVisual, state: AnimationState): void {
     this.scene.tweens.killTweensOf(visual.motion);
     visual.motion.setScale(1).setAngle(0).setPosition(0, -13);
     visual.animationStartedAt = this.scene.time.now;
+    if (state !== 'special') visual.arcadeFrames = undefined;
   }
 
   private updateAnimationPose(actor: Player, visual: ActorVisual): void {
+    if (visual.arcadeFrames && this.scene.time.now < visual.actionUntil) {
+      this.updateDragonArcadePose(visual);
+      return;
+    }
     const animation = getChampionAnimation(actor.character);
     const state = this.frameState(visual.state);
     const range = animation.states[state];
@@ -362,6 +376,31 @@ export class AnimationSystem {
       .setAngle(pose.angle * mirror)
       .setScale(visual.spriteBaseScaleX, visual.spriteBaseScaleY * pose.scaleY)
       .setFlipX(facing === 'left')
+      .setAlpha(1);
+  }
+
+  private updateDragonArcadePose(visual: ActorVisual): void {
+    const frames = visual.arcadeFrames;
+    if (!frames?.length) return;
+    const elapsed = Math.max(0, this.scene.time.now - visual.arcadeAnimationStartedAt);
+    let frameIndex = frames.length - 1;
+    let boundary = 0;
+    for (let index = 0; index < frames.length; index += 1) {
+      boundary += frames[index].durationMs;
+      if (elapsed < boundary) {
+        frameIndex = index;
+        break;
+      }
+    }
+    const frame = frames[frameIndex];
+    if (visual.sprite.texture.key !== frame.textureKey) visual.sprite.setTexture(frame.textureKey);
+    visual.poseFrame = frameIndex;
+    visual.sprite
+      .setOrigin(0.5, 0.875)
+      .setPosition(0, visual.spriteBaseY)
+      .setAngle(0)
+      .setDisplaySize(128, 128)
+      .setFlipX(false)
       .setAlpha(1);
   }
 
