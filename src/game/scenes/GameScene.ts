@@ -171,8 +171,8 @@ export class GameScene extends Phaser.Scene {
           : SESSION.mode === 'classic' ? 5 : 7
     );
     this.spawnActors();
-    this.worldPresentation = new WorldPresentationSystem(this, this.worldRoot, this.grid, this.device);
-    this.worldPresentation.update(this.player, true);
+    this.worldPresentation = new WorldPresentationSystem(this, this.worldRoot, this.grid);
+    this.worldPresentation.update();
     if (SESSION.mode === 'arcade') {
       for (const key of this.blockSprites.keys()) this.arcadeBlockHealth.set(key, 2);
     }
@@ -194,7 +194,7 @@ export class GameScene extends Phaser.Scene {
     if (this.network.active && this.network.role !== 'host') {
       if (pausePressed) this.sendGuestInput('none', false, false, false, true);
       if (!this.paused) this.updateNetworkGuest(Math.min(delta, 34));
-      this.worldPresentation?.update(this.player);
+      this.worldPresentation?.update();
       return;
     }
     if (pausePressed) this.togglePause();
@@ -209,7 +209,7 @@ export class GameScene extends Phaser.Scene {
       this.updateHuman2(dt);
       this.updateBots(dt);
       this.syncSprites();
-      this.worldPresentation?.update(this.player);
+      this.worldPresentation?.update();
       const result = this.mode.update(dt, this.player, this.actors);
       this.hud.update(this.player, this.actors.filter((a) => !a.isHuman && a.alive).length, this.mode.elapsedMs);
       if (result?.done) this.finish(result.won, result.reason);
@@ -229,7 +229,7 @@ export class GameScene extends Phaser.Scene {
     this.danger.rebuild(this.bombs.bombs, this.bombs.activeBlastTiles());
     this.collectPowerUps();
     this.syncSprites();
-    this.worldPresentation?.update(this.player);
+    this.worldPresentation?.update();
     if (this.network.active && this.network.role === 'host') {
       this.mode.elapsedMs += dt;
       this.hud.update(this.player, this.actors.filter((actor) => actor !== this.player && actor.alive).length, this.mode.elapsedMs);
@@ -959,7 +959,6 @@ export class GameScene extends Phaser.Scene {
     const weapon = getArcadeWeapon(actor.character);
     this.arcadeAttackMs.set(actor.id, weapon.attackCooldownMs);
     const { tiles, blocked } = this.arcadeLine(actor, 1);
-    this.renderArcadeTiles(actor, tiles, 'telegraph', weapon.primaryWindupMs, blocked);
     this.beginArcadeAction(actor, weapon, 'primary', () => {
       this.renderArcadeTiles(actor, tiles, 'impact', 220, blocked);
       this.resolveArcadeHits(actor, tiles, weapon.attackName, weapon.highlight);
@@ -1127,11 +1126,17 @@ export class GameScene extends Phaser.Scene {
     const recovery = kind === 'primary' ? weapon.primaryRecoveryMs : kind === 'secondary' ? weapon.secondaryRecoveryMs : weapon.signatureRecoveryMs;
     actor.actionState = 'windup';
     actor.actionMs = windup + recovery;
+    const aim = this.arcadeLine(actor, 1);
+    this.renderArcadeTiles(actor, aim.tiles, 'telegraph', windup, aim.blocked);
     const view = this.views.get(actor.id);
-    if (view) {
-      if (kind === 'primary') this.animation.playPlaceBomb(actor, view);
-      else this.animation.playSpecial(actor, view, weapon.color);
-    }
+    if (view) this.animation.playArcadeAction(
+      actor,
+      view,
+      this.arcadeFacingDirection(actor),
+      weapon.color,
+      windup,
+      recovery
+    );
     this.time.delayedCall(windup, () => {
       if (!actor.alive || this.ended) return;
       actor.actionState = 'release';
@@ -1186,25 +1191,110 @@ export class GameScene extends Phaser.Scene {
   ): void {
     const weapon = getArcadeWeapon(actor.character);
     const fx = this.add.container(0, 0).setDepth(34);
+    const direction = this.facing(actor);
+    const angle = direction.x > 0 ? 0 : direction.x < 0 ? Math.PI : direction.y > 0 ? Math.PI / 2 : -Math.PI / 2;
     for (const tile of tiles) {
       const world = this.grid.toWorld(tile);
-      const size = this.grid.tileSize - (phase === 'telegraph' ? 14 : 8);
-      const mark = this.add.rectangle(world.x, world.y, size, size, weapon.color, phase === 'telegraph' ? 0.12 : 0.34)
-        .setStrokeStyle(phase === 'telegraph' ? 2 : 3, weapon.highlight, phase === 'telegraph' ? 0.72 : 0.96);
-      const core = this.add.circle(world.x, world.y, phase === 'telegraph' ? 4 : 9, weapon.highlight, phase === 'telegraph' ? 0.55 : 0.86);
-      fx.add([mark, core]);
+      if (phase === 'telegraph') {
+        const ring = this.add.circle(world.x, world.y, this.grid.tileSize * 0.28, weapon.color, 0.045)
+          .setStrokeStyle(2, weapon.highlight, actor.isHuman ? 0.86 : 0.62);
+        const lane = this.add.rectangle(
+          world.x - direction.x * this.grid.tileSize * 0.08,
+          world.y - direction.y * this.grid.tileSize * 0.08,
+          this.grid.tileSize * 0.42,
+          actor.isHuman ? 3 : 2,
+          weapon.highlight,
+          actor.isHuman ? 0.72 : 0.52
+        ).setRotation(angle);
+        const arrow = this.add.triangle(
+          world.x + direction.x * this.grid.tileSize * 0.18,
+          world.y + direction.y * this.grid.tileSize * 0.18,
+          -5,
+          -5,
+          6,
+          0,
+          -5,
+          5,
+          weapon.highlight,
+          actor.isHuman ? 0.9 : 0.68
+        ).setRotation(angle);
+        fx.add([ring, lane, arrow]);
+      } else {
+        fx.add(this.createArcadeWeaponImpact(actor, world.x, world.y, angle));
+      }
     }
     if (blocked && this.grid.inBounds(blocked)) {
       const world = this.grid.toWorld(blocked);
-      fx.add(this.add.circle(world.x, world.y, 9, 0x130e12, 0.84).setStrokeStyle(3, weapon.highlight, 0.8));
+      const stop = this.add.circle(world.x, world.y, 9, 0x130e12, 0.5).setStrokeStyle(2, weapon.highlight, 0.78);
+      const slashA = this.add.rectangle(world.x, world.y, 14, 2, weapon.highlight, 0.82).setRotation(Math.PI / 4);
+      const slashB = this.add.rectangle(world.x, world.y, 14, 2, weapon.highlight, 0.82).setRotation(-Math.PI / 4);
+      fx.add([stop, slashA, slashB]);
     }
     this.effectLayer.add(fx);
     if (phase === 'telegraph') {
-      this.tweens.add({ targets: fx, alpha: 0.45, duration: Math.max(90, duration / 3), yoyo: true, repeat: 1 });
+      this.tweens.add({ targets: fx, alpha: actor.isHuman ? 0.48 : 0.38, duration: Math.max(70, duration / 3), yoyo: true, repeat: 1 });
       this.time.delayedCall(duration, () => fx.destroy(true));
     } else {
-      this.tweens.add({ targets: fx, alpha: 0, scale: 1.08, duration, ease: 'Cubic.easeOut', onComplete: () => fx.destroy(true) });
+      this.tweens.add({ targets: fx, alpha: 0, scale: 1.06, duration, ease: 'Cubic.easeOut', onComplete: () => fx.destroy(true) });
     }
+  }
+
+  private createArcadeWeaponImpact(
+    actor: Player,
+    x: number,
+    y: number,
+    angle: number
+  ): Phaser.GameObjects.GameObject[] {
+    const weapon = getArcadeWeapon(actor.character);
+    const size = this.grid.tileSize;
+    const direction = this.facing(actor);
+    const tipX = x + direction.x * size * 0.2;
+    const tipY = y + direction.y * size * 0.2;
+    const objects: Phaser.GameObjects.GameObject[] = [];
+    const stroke = (length: number, thickness: number, rotation = angle, alpha = 0.92) => this.add.rectangle(
+      x,
+      y,
+      length,
+      thickness,
+      weapon.highlight,
+      alpha
+    ).setRotation(rotation);
+
+    if (weapon.style === 'blade') {
+      objects.push(stroke(size * 0.72, 5, angle + 0.48));
+      objects.push(stroke(size * 0.34, 2, angle - 0.38, 0.72));
+      objects.push(this.add.circle(tipX, tipY, 5, weapon.color, 0.92));
+    } else if (weapon.style === 'bow') {
+      objects.push(stroke(size * 0.66, 3));
+      objects.push(this.add.triangle(tipX, tipY, -6, -5, 7, 0, -6, 5, weapon.highlight, 0.96).setRotation(angle));
+      objects.push(this.add.arc(x, y, size * 0.24, 70, 290, false, weapon.color, 0.32).setRotation(angle));
+    } else if (weapon.style === 'mace') {
+      objects.push(stroke(size * 0.48, 4));
+      objects.push(this.add.circle(tipX, tipY, 9, weapon.color, 0.76).setStrokeStyle(3, weapon.highlight, 0.92));
+      objects.push(this.add.circle(tipX, tipY, 14, weapon.color, 0.06).setStrokeStyle(2, weapon.highlight, 0.58));
+    } else if (weapon.style === 'lantern') {
+      objects.push(stroke(size * 0.38, 2));
+      objects.push(this.add.circle(tipX, tipY, 9, weapon.color, 0.54).setStrokeStyle(2, weapon.highlight, 0.92));
+      objects.push(this.add.circle(tipX - direction.y * 8, tipY + direction.x * 8, 4, weapon.highlight, 0.7));
+      objects.push(this.add.circle(tipX + direction.y * 8, tipY - direction.x * 8, 3, weapon.color, 0.62));
+    } else if (weapon.style === 'daggers') {
+      objects.push(stroke(size * 0.52, 4, angle + 0.52));
+      objects.push(stroke(size * 0.52, 4, angle - 0.52));
+      objects.push(this.add.circle(x, y, 5, weapon.color, 0.72));
+    } else if (weapon.style === 'hammer') {
+      objects.push(stroke(size * 0.48, 4));
+      objects.push(this.add.rectangle(tipX, tipY, 15, 10, weapon.highlight, 0.92).setRotation(angle));
+      objects.push(this.add.circle(tipX, tipY, 14, weapon.color, 0.08).setStrokeStyle(2, weapon.color, 0.68));
+    } else if (weapon.style === 'staff') {
+      objects.push(stroke(size * 0.56, 3));
+      objects.push(this.add.star(tipX, tipY, 6, 4, 9, weapon.highlight, 0.9));
+      objects.push(this.add.circle(tipX, tipY, 13, weapon.color, 0.08).setStrokeStyle(2, weapon.color, 0.7));
+    } else {
+      objects.push(stroke(size * 0.76, 4));
+      objects.push(this.add.triangle(tipX, tipY, -7, -6, 9, 0, -7, 6, weapon.highlight, 0.98).setRotation(angle));
+      objects.push(stroke(size * 0.26, 2, angle + Math.PI / 2, 0.68));
+    }
+    return objects;
   }
 
   private firstRivalOnTiles(actor: Player, tiles: GridPosition[]): Player | undefined {
@@ -1213,6 +1303,13 @@ export class GameScene extends Phaser.Scene {
 
   private facing(actor: Player): GridPosition {
     return actor.lastDir.x === 0 && actor.lastDir.y === 0 ? { x: 0, y: 1 } : { ...actor.lastDir };
+  }
+
+  private arcadeFacingDirection(actor: Player): Exclude<Direction, 'none'> {
+    const direction = this.facing(actor);
+    if (direction.x < 0) return 'left';
+    if (direction.x > 0) return 'right';
+    return direction.y < 0 ? 'up' : 'down';
   }
 
   private isFreeArcadeTile(tile: GridPosition, actor?: Player): boolean {

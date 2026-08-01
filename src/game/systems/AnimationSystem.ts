@@ -56,6 +56,7 @@ export interface ActorVisual {
   actionUntil: number;
   actionWasActive: boolean;
   settleUntil: number;
+  actionFacing: Exclude<Direction, 'none'>;
 }
 
 export class AnimationSystem {
@@ -117,7 +118,8 @@ export class AnimationSystem {
       animationStartedAt: this.scene.time.now,
       actionUntil: 0,
       actionWasActive: false,
-      settleUntil: 0
+      settleUntil: 0,
+      actionFacing: 'down'
     };
   }
 
@@ -172,6 +174,7 @@ export class AnimationSystem {
   }
 
   playPlaceBomb(actor: Player, visual: ActorVisual): void {
+    visual.actionFacing = 'down';
     visual.state = 'place_bomb';
     visual.animationStartedAt = this.scene.time.now;
     visual.actionUntil = this.scene.time.now + animationDurationMs(actor.character, 'place');
@@ -182,6 +185,7 @@ export class AnimationSystem {
   }
 
   playSpecial(actor: Player, visual: ActorVisual, color: number): void {
+    visual.actionFacing = 'down';
     visual.buffAura.setStrokeStyle(4, color, 0.95).setFillStyle(color, 0.12).setScale(0.75).setAlpha(1);
     this.scene.tweens.add({
       targets: visual.buffAura,
@@ -196,6 +200,70 @@ export class AnimationSystem {
     visual.actionUntil = this.scene.time.now + animationDurationMs(actor.character, 'special');
     visual.actionWasActive = true;
     visual.settleUntil = 0;
+  }
+
+  playArcadeAction(
+    actor: Player,
+    visual: ActorVisual,
+    facing: Exclude<Direction, 'none'>,
+    color: number,
+    windupMs: number,
+    recoveryMs: number
+  ): void {
+    const vector = facing === 'up'
+      ? { x: 0, y: -1 }
+      : facing === 'down'
+        ? { x: 0, y: 1 }
+        : facing === 'left'
+          ? { x: -1, y: 0 }
+          : { x: 1, y: 0 };
+    visual.actionFacing = facing;
+    visual.state = 'special';
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = this.scene.time.now + windupMs + recoveryMs;
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
+    this.scene.tweens.killTweensOf(visual.motion);
+    visual.motion.setPosition(0, -13).setScale(1).setAngle(0);
+    visual.buffAura.setStrokeStyle(3, color, 0.82).setFillStyle(color, 0.05).setScale(0.86).setAlpha(0.72);
+    this.scene.tweens.add({
+      targets: visual.buffAura,
+      scale: 1.18,
+      alpha: 0,
+      duration: Math.max(180, windupMs + 90),
+      ease: 'Cubic.easeOut'
+    });
+    this.scene.tweens.add({
+      targets: visual.motion,
+      x: -vector.x * 4,
+      y: -13 - vector.y * 3,
+      scaleX: 0.96,
+      scaleY: 0.98,
+      duration: windupMs,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets: visual.motion,
+          x: vector.x * 6,
+          y: -13 + vector.y * 4,
+          scaleX: 1.04,
+          scaleY: 1.02,
+          duration: Math.min(90, Math.max(55, recoveryMs * 0.28)),
+          ease: 'Cubic.easeOut',
+          onComplete: () => {
+            this.scene.tweens.add({
+              targets: visual.motion,
+              x: 0,
+              y: -13,
+              scaleX: 1,
+              scaleY: 1,
+              duration: Math.max(90, recoveryMs - 70),
+              ease: 'Sine.easeOut'
+            });
+          }
+        });
+      }
+    });
   }
 
   playDamaged(actor: Player, visual: ActorVisual): void {
@@ -279,7 +347,7 @@ export class AnimationSystem {
     const offset = range.loop ? raw % count : Math.min(count - 1, raw);
     visual.poseFrame = offset;
 
-    const facing = this.presentationFacing(visual.state);
+    const facing = this.presentationFacing(visual);
     const authored: AuthoredFacing = facing === 'left' ? 'right' : facing;
     const asset = animation.directional[authored];
     if (visual.sprite.texture.key !== asset.textureKey) visual.sprite.setTexture(asset.textureKey);
@@ -297,10 +365,12 @@ export class AnimationSystem {
       .setAlpha(1);
   }
 
-  private presentationFacing(state: AnimationState): Exclude<Direction, 'none'> {
+  private presentationFacing(visual: ActorVisual): Exclude<Direction, 'none'> {
+    const state = visual.state;
     if (state === 'walk_left') return 'left';
     if (state === 'walk_right') return 'right';
     if (state === 'walk_up') return 'up';
+    if (state === 'place_bomb' || state === 'special') return visual.actionFacing;
     return 'down';
   }
 
