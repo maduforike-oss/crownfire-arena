@@ -4,6 +4,8 @@ import type { ModeDef } from '../config/Modes';
 import { getPowerUp } from '../config/PowerUps';
 import { getCharacter } from '../config/Characters';
 import type { ActiveEffectViewModel } from '../config/PresentationConfig';
+import type { GameMode } from '../utils/types';
+import { getArcadeWeapon } from '../config/ArcadeWeapons';
 
 export class HUD {
   private health!: Phaser.GameObjects.Text;
@@ -20,10 +22,12 @@ export class HUD {
   private activePanel!: Phaser.GameObjects.Container;
   private lastPulseKey = '';
   private compact = false;
+  private mode: GameMode = 'classic';
 
   constructor(private readonly scene: Phaser.Scene) {}
 
   create(mode: ModeDef, compact = false): void {
+    this.mode = mode.id;
     this.compact = compact;
     if (compact) {
       this.createCompact(mode);
@@ -55,7 +59,9 @@ export class HUD {
       fontFamily: 'Arial', fontStyle: 'bold', fontSize: '10px', color: '#a99eb4', align: 'center'
     }).setOrigin(0.5);
 
-    this.scene.add.text(130, 421, 'LAST RUNE', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e' }).setOrigin(0.5);
+    this.scene.add.text(130, 421, mode.id === 'arcade' ? 'WEAPON ACTION' : 'LAST RUNE', {
+      fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e'
+    }).setOrigin(0.5);
     this.scene.add.circle(130, 486, 46, 0xd8a84e, 0.05).setStrokeStyle(1, 0xd8a84e, 0.35);
     this.powerIcon = this.scene.add.image(130, 486, 'power-fallback').setDisplaySize(76, 76).setAlpha(0.45);
     this.powerText = this.scene.add.text(130, 544, 'No rune held', { fontFamily: 'Georgia', fontSize: '15px', color: '#958a78', align: 'center', wordWrap: { width: 180 } }).setOrigin(0.5);
@@ -66,7 +72,9 @@ export class HUD {
     this.scene.add.text(1150, 192, 'ACTIVE EFFECTS', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d9b8ff' }).setOrigin(0.5);
     this.activePanel = this.scene.add.container(1150, 220);
     this.scene.add.text(1150, 580, 'CONTROLS', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e' }).setOrigin(0.5);
-    this.scene.add.text(1150, 625, 'WASD  Move\nSPACE  Rune bomb\nSHIFT  Special\nE  Remote hex (armed)', {
+    this.scene.add.text(1150, 625, mode.id === 'arcade'
+      ? 'WASD  Move\nSPACE  Weapon strike\nSHIFT  Signature'
+      : 'WASD  Move\nSPACE  Rune bomb\nSHIFT  Special\nE  Remote hex (armed)', {
       fontFamily: 'Arial', fontSize: '13px', color: '#bdb4a5', align: 'left', lineSpacing: 7
     }).setOrigin(0.5);
   }
@@ -92,6 +100,8 @@ export class HUD {
           ? 'Collect 10 Crown Shards'
           : mode.id === 'grand'
             ? 'Rumble: last champion standing'
+          : mode.id === 'arcade'
+            ? 'Defeat rivals with champion weapons'
           : mode.objective;
     this.objective = this.scene.add.text(585, 20, compactObjective, {
       fontFamily: 'Georgia', fontSize: '13px', color: '#f4ead2', align: 'center', wordWrap: { width: 220 }
@@ -123,43 +133,68 @@ export class HUD {
 
   update(player: Player, livingBots: number, elapsedMs: number): void {
     const character = getCharacter(player.character);
-    this.health.setText(`${'♥'.repeat(Math.max(0, player.stats.health))}${'♡'.repeat(Math.max(0, player.stats.maxHealth - player.stats.health))}`);
-    this.stats.setText(this.compact
-      ? `BOMB ${player.stats.activeBombs}/${player.stats.maxBombs}  R${player.stats.blastRadius}`
-      : `BOMBS  ${player.stats.activeBombs}/${player.stats.maxBombs}\nBLAST RADIUS  ${player.stats.blastRadius}`);
-    this.shards.setText(this.compact ? `SHARDS ${player.shards}` : `CROWN SHARDS  ${player.shards}`);
+    const arcadeWeapon = this.mode === 'arcade' ? getArcadeWeapon(player.character) : undefined;
+    this.health.setText(`${'\u2665'.repeat(Math.max(0, player.stats.health))}${'\u2661'.repeat(Math.max(0, player.stats.maxHealth - player.stats.health))}`);
+    this.stats.setText(arcadeWeapon
+      ? this.compact
+        ? `${arcadeWeapon.style.toUpperCase()}  R${player.arcadePowerMs > 0 ? arcadeWeapon.empoweredRange : arcadeWeapon.range}`
+        : `${arcadeWeapon.name.toUpperCase()}\nRANGE  ${player.arcadePowerMs > 0 ? arcadeWeapon.empoweredRange : arcadeWeapon.range}`
+      : this.compact
+        ? `BOMB ${player.stats.activeBombs}/${player.stats.maxBombs}  R${player.stats.blastRadius}`
+        : `BOMBS  ${player.stats.activeBombs}/${player.stats.maxBombs}\nBLAST RADIUS  ${player.stats.blastRadius}`);
+    this.shards.setText(arcadeWeapon ? '' : this.compact ? `SHARDS ${player.shards}` : `CROWN SHARDS  ${player.shards}`);
     this.bots.setText(this.compact ? `${livingBots} RIVALS` : `${livingBots} RIVALS REMAIN`);
     const seconds = Math.floor(elapsedMs / 1000);
     this.timer.setText(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
     const cooldown = Math.max(0, player.specialCooldownMs);
     const storedPower = player.storedPower ? getPowerUp(player.storedPower) : undefined;
-    this.special.setText(storedPower
+    this.special.setText(arcadeWeapon
+      ? player.arcadePowerMs > 0
+        ? `${arcadeWeapon.signatureName}${this.compact ? ' ' : '\n'}${Math.ceil(player.arcadePowerMs / 1000)}s`
+        : cooldown > 0
+          ? `${arcadeWeapon.signatureName}${this.compact ? ' ' : '\n'}${Math.ceil(cooldown / 1000)}s`
+          : `${arcadeWeapon.signatureName}${this.compact ? ' ' : '\n'}READY`
+      : storedPower
       ? `${storedPower.name}${this.compact ? ' ' : '\n'}STORED`
       : cooldown > 0
         ? `${character.specialName}${this.compact ? ' ' : '\n'}${Math.ceil(cooldown / 1000)}s`
         : `${character.specialName}${this.compact ? ' ' : '\n'}READY`);
-    const cooldownMax = player.character === 'wolf' ? 7000 : player.character === 'raven' ? 8000 : player.character === 'dragon' || player.character === 'frost' ? 10000 : 12000;
+    const cooldownMax = arcadeWeapon?.signatureCooldownMs ?? (player.character === 'wolf' ? 7000 : player.character === 'raven' ? 8000 : player.character === 'dragon' || player.character === 'frost' ? 10000 : 12000);
     const specialWidth = this.compact ? 110 : 164;
     this.specialBar.displayWidth = storedPower ? specialWidth : specialWidth * (cooldown > 0 ? 1 - Math.min(1, cooldown / cooldownMax) : 1);
-    this.specialBar.setFillStyle(storedPower?.color ?? (cooldown > 0 ? 0x6d4b88 : character.accentColor));
+    this.specialBar.setFillStyle(arcadeWeapon?.color ?? storedPower?.color ?? (cooldown > 0 ? 0x6d4b88 : character.accentColor));
     this.specialHint.setText(
-      storedPower
+      arcadeWeapon
+        ? this.compact ? arcadeWeapon.attackName.toUpperCase() : `${arcadeWeapon.attackName.toUpperCase()}  |  ${Math.ceil(arcadeWeapon.activeMs / 1000)}s EMPOWER`
+        : storedPower
         ? this.compact ? 'POWER TO RELEASE' : 'POWER / SHIFT TO RELEASE'
         : player.character === 'dragon'
-        ? this.compact ? 'LINE R6' : 'FACING LINE  •  RANGE 6'
+        ? this.compact ? 'LINE R6' : 'FACING LINE  |  RANGE 6'
         : player.character === 'frost'
-          ? this.compact ? 'ICE TRAIL 5s' : 'MOVE TO LAY ICE  •  5s'
+          ? this.compact ? 'ICE TRAIL 5s' : 'MOVE TO LAY ICE  |  5s'
           : player.character === 'stone'
-            ? this.compact ? 'SHIELD 10s' : 'ABSORBS NEXT HIT  •  10s'
+            ? this.compact ? 'SHIELD 10s' : 'ABSORBS NEXT HIT  |  10s'
             : ''
     );
 
-    if (player.lastPowerUp) {
+    if (arcadeWeapon) {
+      this.powerIcon
+        .setTexture(character.assetKey)
+        .setDisplaySize(this.compact ? 22 : 76, this.compact ? 22 : 76)
+        .setAlpha(1);
+      this.powerText.setText(this.compact ? arcadeWeapon.attackName.toUpperCase() : arcadeWeapon.attackName).setColor('#f4ead2');
+    } else if (player.lastPowerUp) {
       const power = getPowerUp(player.lastPowerUp);
-      this.powerIcon.setTexture(this.scene.textures.exists(power.assetKey) ? power.assetKey : 'power-fallback').setAlpha(1);
+      this.powerIcon
+        .setTexture(this.scene.textures.exists(power.assetKey) ? power.assetKey : 'power-fallback')
+        .setDisplaySize(this.compact ? 22 : 76, this.compact ? 22 : 76)
+        .setAlpha(1);
       this.powerText.setText(this.compact ? power.name.toUpperCase() : power.name).setColor('#f4ead2');
     } else {
-      this.powerIcon.setTexture('power-fallback').setAlpha(0.45);
+      this.powerIcon
+        .setTexture('power-fallback')
+        .setDisplaySize(this.compact ? 22 : 76, this.compact ? 22 : 76)
+        .setAlpha(0.45);
       this.powerText.setText(this.compact ? 'NO RUNE' : 'No rune held').setColor('#958a78');
     }
     this.objective.setColor(player.stats.temporaryGhostMode > 0 ? '#cdd8ff' : '#f4ead2');
@@ -182,6 +217,17 @@ export class HUD {
   private renderActiveEffects(player: Player): void {
     this.activePanel.removeAll(true);
     const effects: ActiveEffectViewModel[] = [];
+    if (this.mode === 'arcade' && player.arcadePowerMs > 0) {
+      const character = getCharacter(player.character);
+      const weapon = getArcadeWeapon(player.character);
+      effects.push({
+        icon: character.assetKey,
+        label: weapon.signatureName,
+        color: weapon.color,
+        remainingMs: player.arcadePowerMs,
+        description: `${weapon.name} empowered`
+      });
+    }
     if (player.storedPower) {
       const stored = getPowerUp(player.storedPower);
       effects.push({

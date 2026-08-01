@@ -9,6 +9,7 @@ import { ModeSelectScene } from './game/scenes/ModeSelectScene';
 import { MapSelectScene } from './game/scenes/MapSelectScene';
 import { GameScene } from './game/scenes/GameScene';
 import { ResultsScene } from './game/scenes/ResultsScene';
+import { ArcadeLoadingScene } from './game/scenes/ArcadeLoadingScene';
 import { PowerUpGuideScene } from './game/scenes/PowerUpGuideScene';
 import { ControllerSetupScene } from './game/scenes/ControllerSetupScene';
 import { MultiplayerLobbyScene } from './game/scenes/MultiplayerLobbyScene';
@@ -50,6 +51,7 @@ new Phaser.Game({
     ControllerSetupScene,
     SocialHubScene,
     MultiplayerLobbyScene,
+    ArcadeLoadingScene,
     GameScene,
     ResultsScene
   ]

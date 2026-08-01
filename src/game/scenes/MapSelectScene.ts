@@ -61,17 +61,7 @@ export class MapSelectScene extends Phaser.Scene {
         fontSize: '10px',
         color: selected ? '#ffe39b' : '#9ec8ff'
       }).setOrigin(0.5).setLetterSpacing(1);
-      const zone = this.add.zone(x, y, 276, 410).setInteractive({ useHandCursor: true }).on('pointerover', () => {
-        panel.setStrokeStyle(3, map.glow, 1);
-        landscape.setAlpha(1);
-        board.setAlpha(1);
-        this.tweens.add({ targets: [landscape, board], scaleX: 1.015, scaleY: 1.015, duration: 140 });
-      }).on('pointerout', () => {
-        panel.setStrokeStyle(3, selected ? map.glow : 0x51463c, selected ? 1 : 0.8);
-        landscape.setAlpha(selected ? 1 : 0.9);
-        board.setAlpha(selected ? 1 : 0.88);
-        this.tweens.add({ targets: [landscape, board], scaleX: 1, scaleY: 1, duration: 140 });
-      }).on('pointerdown', () => {
+      const zone = this.add.zone(x, y, 276, 410).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         SESSION.map = map.id;
         const network = NetworkSession.get();
         if (network.active && network.role === 'host') {
@@ -88,7 +78,7 @@ export class MapSelectScene extends Phaser.Scene {
           });
           return;
         }
-        this.scene.start('GameScene');
+        this.scene.start(SESSION.mode === 'arcade' ? 'ArcadeLoadingScene' : 'GameScene');
       });
       zone.setDepth(20);
     });

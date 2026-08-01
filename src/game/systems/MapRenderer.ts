@@ -27,7 +27,7 @@ export class MapRenderer {
 
     this.renderBackplate(grid.map, boardBounds);
     this.renderPremiumFloor(grid, layers.tileLayer, boardBounds);
-    this.renderBorder(grid, layers.tileLayer);
+    this.renderBorder(boardBounds, layers.tileLayer);
 
     let shrine!: Phaser.GameObjects.Container;
     for (let y = 0; y < grid.map.height; y += 1) {
@@ -36,9 +36,7 @@ export class MapRenderer {
         const world = grid.toWorld(pos);
         const floorKey = `map-${grid.map.id}-floor-${this.floorVariant(grid.map.id, x, y)}`;
         const floor = this.scene.add.image(world.x, world.y, floorKey).setDisplaySize(grid.tileSize, grid.tileSize);
-        if (this.scene.textures.exists(`map-${grid.map.id}-premium-floor`)) {
-          floor.setAlpha(grid.map.id === 'frost' || grid.map.id === 'hollow' ? 0.012 : 0.025);
-        }
+        if (this.scene.textures.exists(`map-${grid.map.id}-premium-floor`)) floor.setAlpha(0.035);
         layers.tileLayer.add(floor);
 
         if (grid.spawnReserved.has(keyOf(pos))) this.renderSpawnPad(grid, layers.tileLayer, pos, debugSpawnSafe);
@@ -65,35 +63,21 @@ export class MapRenderer {
   }
 
   private renderBackplate(map: MapDef, bounds: Phaser.Geom.Rectangle): void {
-    const theme = getMapTheme(map.id);
     this.scene.add.rectangle(GAME_CONFIG.width / 2, GAME_CONFIG.height / 2, GAME_CONFIG.width, GAME_CONFIG.height, 0x050508).setDepth(-5);
-    this.scene.add.image(
-      GAME_CONFIG.width / 2,
-      GAME_CONFIG.height / 2,
-      'reference-arena-atlas',
-      `reference-${map.id}-board`
-    ).setDisplaySize(1280, 960).setAlpha(0.22).setDepth(-4);
     this.scene.add.image(40, 360, 'reference-arena-atlas', `reference-${map.id}-landscape`)
       .setDisplaySize(475, 720)
-      .setAlpha(0.68)
+      .setAlpha(0.5)
       .setDepth(-3);
     this.scene.add.image(GAME_CONFIG.width - 40, 360, 'reference-arena-atlas', `reference-${map.id}-landscape`)
       .setDisplaySize(475, 720)
-      .setAlpha(0.68)
+      .setAlpha(0.5)
       .setDepth(-3)
       .setFlipX(true);
     this.scene.add.rectangle(130, 360, 260, 720, 0x050508, 0.36).setDepth(-3);
     this.scene.add.rectangle(GAME_CONFIG.width - 130, 360, 260, 720, 0x050508, 0.36).setDepth(-3);
 
-    const glow = this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 70, bounds.height + 70, theme.accentColor, 0.08);
-    glow.setDepth(-3);
-    this.scene.tweens.add({ targets: glow, alpha: 0.14, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-
-    this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 44, bounds.height + 44, 0x09080c, 0.88)
-      .setStrokeStyle(3, theme.accentColor, 0.38)
-      .setDepth(-2);
-    this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 16, bounds.height + 16, 0x08070b, 0.72)
-      .setStrokeStyle(1, 0xd8a84e, 0.2)
+    this.scene.add.rectangle(bounds.centerX, bounds.centerY, bounds.width + 34, bounds.height + 34, 0x07080c, 0.96)
+      .setStrokeStyle(2, 0xa99c82, 0.16)
       .setDepth(-1);
   }
 
@@ -105,10 +89,10 @@ export class MapRenderer {
     tileLayer.add(floor);
     const glowKey = `map-${grid.map.id}-premium-floor-glow`;
     if (this.scene.textures.exists(glowKey)) {
-      const glowAlpha = grid.map.id === 'frost'
-        ? { low: 0.018, high: 0.034 }
-        : grid.map.id === 'hollow'
-          ? { low: 0.02, high: 0.038 }
+      const glowAlpha = grid.map.id === 'frostkeep'
+        ? { low: 0.012, high: 0.026 }
+        : grid.map.id === 'hollowmoon'
+          ? { low: 0.014, high: 0.03 }
           : grid.map.id === 'moonfang'
             ? { low: 0.03, high: 0.055 }
             : { low: 0.045, high: 0.085 };
@@ -128,18 +112,13 @@ export class MapRenderer {
     }
   }
 
-  private renderBorder(grid: GridSystem, tileLayer: Phaser.GameObjects.Container): void {
-    const key = `map-${grid.map.id}-border`;
-    const start = grid.toWorld({ x: 0, y: 0 });
-    const end = grid.toWorld({ x: grid.map.width - 1, y: grid.map.height - 1 });
-    for (let x = start.x - 24; x <= end.x + 24; x += 96) {
-      tileLayer.add(this.scene.add.image(x, start.y - 58, key).setDisplaySize(96, 48));
-      tileLayer.add(this.scene.add.image(x, end.y + 62, key).setDisplaySize(96, 48).setFlipY(true));
-    }
-    for (let y = start.y - 26; y <= end.y + 38; y += 96) {
-      tileLayer.add(this.scene.add.image(start.x - 58, y, key).setDisplaySize(96, 48).setAngle(-90));
-      tileLayer.add(this.scene.add.image(end.x + 58, y, key).setDisplaySize(96, 48).setAngle(90));
-    }
+  private renderBorder(bounds: Phaser.Geom.Rectangle, tileLayer: Phaser.GameObjects.Container): void {
+    const thickness = 16;
+    const metal = 0x807664;
+    tileLayer.add(this.scene.add.rectangle(bounds.centerX, bounds.top - thickness / 2, bounds.width + thickness * 2, thickness, 0x0a0b0f, 1).setStrokeStyle(1, metal, 0.18));
+    tileLayer.add(this.scene.add.rectangle(bounds.centerX, bounds.bottom + thickness / 2, bounds.width + thickness * 2, thickness, 0x0a0b0f, 1).setStrokeStyle(1, metal, 0.18));
+    tileLayer.add(this.scene.add.rectangle(bounds.left - thickness / 2, bounds.centerY, thickness, bounds.height, 0x0a0b0f, 1).setStrokeStyle(1, metal, 0.18));
+    tileLayer.add(this.scene.add.rectangle(bounds.right + thickness / 2, bounds.centerY, thickness, bounds.height, 0x0a0b0f, 1).setStrokeStyle(1, metal, 0.18));
   }
 
   private renderSpawnPad(grid: GridSystem, tileLayer: Phaser.GameObjects.Container, pos: GridPosition, debug: boolean): void {
@@ -156,10 +135,11 @@ export class MapRenderer {
   }
 
   private renderLowDecals(grid: GridSystem, tileLayer: Phaser.GameObjects.Container, pos: GridPosition): void {
+    if (grid.get(pos) !== 'empty') return;
     const world = grid.toWorld(pos);
     const theme = getMapTheme(grid.map.id);
     const hash = (pos.x * 37 + pos.y * 53 + grid.map.id.length * 11) % 29;
-    const decalAlpha = grid.map.id === 'hollow' || grid.map.id === 'frost' ? 0.1 : 0.16;
+    const decalAlpha = grid.map.id === 'hollowmoon' || grid.map.id === 'frostkeep' ? 0.07 : 0.11;
     if (hash === 0 || hash === 5) {
       tileLayer.add(this.scene.add.circle(world.x + 13, world.y - 12, 2.5, theme.accentColor, decalAlpha));
     }
@@ -181,48 +161,33 @@ export class MapRenderer {
     const premiumKey = `map-${grid.map.id}-premium-shrine`;
     const premium = this.scene.textures.exists(premiumKey);
     if (premium) {
-      shrine.add(this.scene.add.ellipse(0, 22, 138, 52, 0x000000, 0.42));
-      const shrineSize = grid.map.id === 'ashen' ? 170 : 150;
+      shrine.add(this.scene.add.ellipse(0, 19, 112, 38, 0x000000, 0.46));
+      const shrineSize = grid.map.id === 'ashen' ? 126 : 116;
       shrine.add(this.scene.add.image(0, -4, premiumKey).setDisplaySize(shrineSize, shrineSize));
     } else {
       shrine.add(this.scene.add.image(0, 0, `map-${grid.map.id}-shrine`).setDisplaySize(118, 118));
     }
-    shrine.add(this.scene.add.circle(0, 0, 30, theme.accentColor, 0.08).setStrokeStyle(2, theme.accentColor, 0.42));
+    const pulse = this.scene.add.circle(0, 0, 29, theme.accentColor, 0.05).setStrokeStyle(2, theme.accentColor, 0.42);
+    shrine.add(pulse);
     tileLayer.add(shrine);
-    this.scene.tweens.add({ targets: shrine, alpha: 0.72, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.scene.tweens.add({ targets: pulse, alpha: 0.18, scale: 1.16, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     return shrine;
   }
 
   private renderSolid(grid: GridSystem, pos: GridPosition): Phaser.GameObjects.Container {
     const world = grid.toWorld(pos);
-    const theme = getMapTheme(grid.map.id);
     const wall = this.scene.add.container(world.x, world.y);
     const premiumKey = `map-${grid.map.id}-premium-solid`;
     const premium = this.scene.textures.exists(premiumKey);
     if (premium) {
       wall.add(this.scene.add.ellipse(0, 17, 53, 20, 0x000000, 0.5));
       const scale = grid.tileSize / GAME_CONFIG.tileSize;
-      const wallSize = (grid.map.id === 'ashen' ? 76 : 64) * scale;
-      const wallOffset = (grid.map.id === 'ashen' ? -10 : -5) * scale;
+      const wallSize = (grid.map.id === 'ashen' ? 76 : 70) * scale;
+      const wallOffset = (grid.map.id === 'ashen' ? -10 : -7) * scale;
       const image = this.scene.add.image(0, wallOffset, premiumKey).setDisplaySize(wallSize, wallSize);
-      if (grid.map.id === 'frost') image.setTint(0xa4b2bb);
-      if (grid.map.id === 'hollow') image.setTint(0x918b99);
-      if (grid.map.id === 'moonfang') image.setTint(0x94a0a4);
       wall.add(image);
     } else {
       wall.add(this.scene.add.image(0, 0, `map-${grid.map.id}-solid`).setDisplaySize(53, 53));
-    }
-    if ((pos.x + pos.y) % 4 === 0) {
-      const capColor = grid.map.id === 'frost'
-        ? 0xe4f0f4
-        : grid.map.id === 'hollow'
-          ? 0xc8c1ce
-          : theme.accentColor;
-      wall.add(this.scene.add.circle(0, -12, 5, capColor, grid.map.id === 'ashen' ? 0.24 : 0.17));
-    }
-    if (grid.map.id === 'moonfang' && (pos.x * 3 + pos.y) % 7 === 0) {
-      wall.add(this.scene.add.arc(0, -8, 7, 65, 295, false, 0x8fb6d8, 0)
-        .setStrokeStyle(1.5, 0x8fb6d8, 0.36));
     }
     return wall;
   }
@@ -235,32 +200,21 @@ export class MapRenderer {
     if (premium) {
       block.add(this.scene.add.ellipse(0, 17, 51, 18, 0x000000, 0.44));
       const scale = grid.tileSize / GAME_CONFIG.tileSize;
-      const blockSize = (grid.map.id === 'ashen' ? 70 : 58) * scale;
-      const blockOffset = (grid.map.id === 'ashen' ? -7 : 0) * scale;
+      const blockSize = (grid.map.id === 'ashen' ? 64 : 58) * scale;
+      const blockOffset = (grid.map.id === 'ashen' ? -5 : 0) * scale;
       const image = this.scene.add.image(0, blockOffset, premiumKey).setDisplaySize(blockSize, blockSize);
-      if (grid.map.id === 'frost') image.setTint(0xd7edf2);
-      if (grid.map.id === 'hollow') image.setTint(0xc5a9cc);
-      if (grid.map.id === 'moonfang') image.setTint(0xa7ad8e);
       block.add(image);
     } else {
       block.add(this.scene.add.image(0, 0, `map-${grid.map.id}-block`).setDisplaySize(52, 52));
-    }
-    if (grid.map.id === 'moonfang') {
-      block.add(this.scene.add.circle(-11, 8, 3, 0x647856, 0.54));
-      block.add(this.scene.add.circle(10, -7, 2, 0x758664, 0.46));
-    } else if (grid.map.id === 'frost') {
-      block.add(this.scene.add.line(0, 0, -12, 8, 9, -10, 0xe7fbff, 0.38).setLineWidth(1.5));
-    } else if (grid.map.id === 'hollow') {
-      block.add(this.scene.add.circle(0, -4, 6, 0xd7bcdf, 0.06).setStrokeStyle(1.5, 0xd7bcdf, 0.42));
     }
     return block;
   }
 
   private renderAmbient(color: number, bounds: Phaser.Geom.Rectangle, effectLayer: Phaser.GameObjects.Container): void {
-    for (let i = 0; i < 18; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       const x = Phaser.Math.Between(bounds.left + 10, bounds.right - 10);
       const y = Phaser.Math.Between(bounds.top + 10, bounds.bottom - 10);
-      const mote = this.scene.add.circle(x, y, Phaser.Math.Between(1, 3), color, 0.14);
+      const mote = this.scene.add.circle(x, y, Phaser.Math.Between(1, 2), color, 0.09);
       effectLayer.add(mote);
       this.scene.tweens.add({
         targets: mote,
@@ -277,12 +231,12 @@ export class MapRenderer {
   private renderAnimatedThemeDetails(grid: GridSystem, effectLayer: Phaser.GameObjects.Container): void {
     const theme = getMapTheme(grid.map.id);
     const anchors: GridPosition[] = [
-      { x: 1, y: 1 },
-      { x: grid.map.width - 2, y: 1 },
-      { x: 1, y: grid.map.height - 2 },
-      { x: grid.map.width - 2, y: grid.map.height - 2 },
-      { x: Math.floor(grid.map.width / 2), y: 1 },
-      { x: Math.floor(grid.map.width / 2), y: grid.map.height - 2 }
+      { x: 0, y: 0 },
+      { x: grid.map.width - 1, y: 0 },
+      { x: 0, y: grid.map.height - 1 },
+      { x: grid.map.width - 1, y: grid.map.height - 1 },
+      { x: Math.floor(grid.map.width / 2), y: 0 },
+      { x: Math.floor(grid.map.width / 2), y: grid.map.height - 1 }
     ];
 
     anchors.forEach((pos, index) => {

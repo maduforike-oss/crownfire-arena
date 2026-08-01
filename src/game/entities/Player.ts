@@ -28,6 +28,7 @@ export class Player {
   storedPower?: StoredPowerType;
   actionState?: ActionState;
   actionMs = 0;
+  arcadePowerMs = 0;
   frostTrailZoneMs = 0;
   mirrorDecoyId?: string;
   lastDir = { x: 0, y: 1 };

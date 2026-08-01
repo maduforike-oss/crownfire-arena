@@ -68,7 +68,7 @@ export class ResultsScene extends Phaser.Scene {
       if (d.menuOnly) {
         this.scene.start('MainMenuScene');
       } else if (!network.active) {
-        this.scene.start('GameScene');
+        this.scene.start(SESSION.mode === 'arcade' ? 'ArcadeLoadingScene' : 'GameScene');
       } else {
         network.voteRematch();
         const notice = this.add.text(contentX, 614, 'REMATCH VOTE CAST • WAITING FOR RIVALS', {

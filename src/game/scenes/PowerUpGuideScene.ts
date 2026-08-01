@@ -43,7 +43,7 @@ export class PowerUpGuideScene extends Phaser.Scene {
 
     POWER_UPS.forEach((power, index) => {
       const x = 330 + (index % 2) * 620;
-      const y = 136 + Math.floor(index / 2) * 86;
+      const y = 154 + Math.floor(index / 2) * 82;
       const texture = this.textures.exists(power.assetKey) ? power.assetKey : 'power-fallback';
       const panel = this.add.rectangle(x, y, 570, 68, 0x11131b, 0.95).setStrokeStyle(1, power.color, 0.68);
       const icon = this.add.image(x - 248, y, texture).setDisplaySize(56, 56);

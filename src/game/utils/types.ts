@@ -38,7 +38,7 @@ export type PowerUpType =
   | 'crownSurge';
 export type StoredPowerType = 'dragonCore' | 'frostSnare' | 'ravenBlink' | 'beastCall';
 export type ActionState = 'windup' | 'release' | 'recovery';
-export type GameMode = 'classic' | 'shards' | 'grand' | 'sandbox' | 'survival' | 'royale' | 'dominion';
+export type GameMode = 'classic' | 'shards' | 'grand' | 'arcade' | 'sandbox' | 'survival' | 'royale' | 'dominion';
 export type BotDifficulty = 'easy' | 'normal' | 'hard';
 export type BotState =
   | 'IDLE'

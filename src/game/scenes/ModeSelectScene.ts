@@ -17,16 +17,16 @@ export class ModeSelectScene extends Phaser.Scene {
     addPanel(this, 640, 350, 760, 470, 0x9dc8ff, 0.88);
 
     MODES.forEach((mode, index) => {
-      const y = 124 + index * 55;
+      const y = 140 + index * 43;
       const selected = mode.id === SESSION.mode;
-      this.add.rectangle(640, y, 700, 46, selected ? 0x202432 : 0x15171f, 0.94)
+      this.add.rectangle(640, y, 700, 40, selected ? 0x202432 : 0x15171f, 0.94)
         .setStrokeStyle(2, selected ? 0xf7d783 : 0x4d5566);
-      this.add.text(316, y - 16, `${mode.name}${mode.implemented ? '' : '  |  COMING SOON'}`, {
+      this.add.text(316, y - 14, `${mode.name}${mode.implemented ? '' : '  |  COMING SOON'}`, {
         fontFamily: 'Georgia',
         fontSize: '16px',
         color: mode.implemented ? '#f4ead2' : '#82776b'
       });
-      this.add.text(316, y + 5, mode.objective, {
+      this.add.text(316, y + 4, mode.objective, {
         fontFamily: 'Arial',
         fontSize: '11px',
         color: '#b5bdd0'
@@ -41,7 +41,7 @@ export class ModeSelectScene extends Phaser.Scene {
       }
       const selectable = mode.implemented && (!network.active || mode.id === 'grand');
       if (selectable) {
-        this.add.zone(640, y, 700, 46)
+        this.add.zone(640, y, 700, 40)
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
             SESSION.mode = mode.id;
@@ -51,7 +51,7 @@ export class ModeSelectScene extends Phaser.Scene {
       }
     });
 
-    const playersY = 526;
+    const playersY = 516;
     this.add.rectangle(640, playersY, 700, 48, 0x17151d, 0.94).setStrokeStyle(1, 0xd8a84e, 0.6);
     this.add.text(316, playersY - 12, network.active
       ? `ONLINE RUMBLE  ${network.connectedPeers}/4 HUMAN`

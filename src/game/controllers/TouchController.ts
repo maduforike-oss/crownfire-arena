@@ -5,6 +5,11 @@ import { PRESENTATION } from '../config/PresentationConfig';
 
 type TouchAction = 'bomb' | 'special' | 'remote' | 'pause';
 
+export interface TouchControllerLabels {
+  primary?: string;
+  power?: string;
+}
+
 const STICK_TRAVEL = 54;
 const STICK_DEAD_ZONE = 13;
 
@@ -19,9 +24,11 @@ export class TouchController {
   private remoteButton?: Phaser.GameObjects.Container;
   private remoteLabel?: Phaser.GameObjects.Text;
   private powerLabel?: Phaser.GameObjects.Text;
+  private readonly idlePowerLabel: string;
   private readonly stickCenter: { x: number; y: number };
 
-  constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile) {
+  constructor(private readonly scene: Phaser.Scene, profile: DeviceProfile, labels: TouchControllerLabels = {}) {
+    this.idlePowerLabel = labels.power ?? 'POWER';
     this.visible = profile.touch || scene.sys.game.device.input.touch || new URLSearchParams(window.location.search).has('touch');
     // Touch controls live in the presentation rails, never in world-space. This
     // stays true for both the 15 x 13 arena and the wider Rumble map.
@@ -35,8 +42,8 @@ export class TouchController {
     const actionX = rightRailCenter + 28;
     const remoteX = rightRailCenter + 28;
     const pauseX = 1238;
-    this.createActionButton(actionX, profile.compactHud ? 500 : 555, profile.compactHud ? 58 : 66, 0xf06a31, 'BOMB', 'bomb');
-    this.createActionButton(actionX, profile.compactHud ? 632 : 628, profile.compactHud ? 48 : 54, 0xa974ff, 'POWER', 'special');
+    this.createActionButton(actionX, profile.compactHud ? 500 : 555, profile.compactHud ? 58 : 66, 0xf06a31, labels.primary ?? 'BOMB', 'bomb');
+    this.createActionButton(actionX, profile.compactHud ? 632 : 628, profile.compactHud ? 48 : 54, 0xa974ff, this.idlePowerLabel, 'special');
     this.remoteButton = this.createActionButton(remoteX, profile.compactHud ? 362 : 652, profile.compactHud ? 42 : 48, 0x9e70ff, 'HEX', 'remote').setVisible(false);
     this.createActionButton(pauseX, 42, profile.compactHud ? 31 : 34, 0xd8a84e, 'II', 'pause');
 
@@ -74,7 +81,7 @@ export class TouchController {
   }
 
   setStoredPowerAvailable(available: boolean): void {
-    this.powerLabel?.setText(available ? 'CAST\nRUNE' : 'POWER');
+    this.powerLabel?.setText(available ? 'CAST\nRUNE' : this.idlePowerLabel);
   }
 
   private createJoystick(): void {

@@ -39,6 +39,8 @@ import type {
 import { Bomb } from '../entities/Bomb';
 import { PowerUp } from '../entities/PowerUp';
 import { applyBotProfile, buildBotRoster } from '../config/BotProfiles';
+import { getArcadeWeapon } from '../config/ArcadeWeapons';
+import { WorldPresentationSystem } from '../systems/WorldPresentationSystem';
 
 interface MirrorDecoy {
   ownerId: string;
@@ -69,6 +71,8 @@ export class GameScene extends Phaser.Scene {
   private objectLayer!: Phaser.GameObjects.Container;
   private effectLayer!: Phaser.GameObjects.Container;
   private uiLayer!: Phaser.GameObjects.Container;
+  private worldRoot!: Phaser.GameObjects.Container;
+  private worldPresentation?: WorldPresentationSystem;
   private blockSprites = new Map<string, Phaser.GameObjects.Container>();
   private powerSprites = new Map<string, Phaser.GameObjects.Container>();
   private frostZones = new Map<string, number>();
@@ -100,6 +104,10 @@ export class GameScene extends Phaser.Scene {
   private lastReceivedSnapshotSequence = 0;
   private lastNetworkDirection: Direction = 'none';
   private networkStatusText?: Phaser.GameObjects.Text;
+  private arcadeAttackMs = new Map<string, number>();
+  private arcadePowerMs = new Map<string, number>();
+  private arcadeCompanionMs = new Map<string, number>();
+  private arcadeBlockHealth = new Map<string, number>();
 
   constructor() {
     super('GameScene');
@@ -124,27 +132,36 @@ export class GameScene extends Phaser.Scene {
     this.mode = new ModeSystem(SESSION.mode);
     this.ai = new AIController(this.network.active || SESSION.mode === 'grand' ? 'hard' : SESSION.botDifficulty);
     this.human = new HumanController(this, 'wasd');
-    this.touch = new TouchController(this, this.device);
+    this.touch = new TouchController(this, this.device, SESSION.mode === 'arcade'
+      ? { primary: 'STRIKE', power: 'SIGNATURE' }
+      : undefined);
     this.human2 = SESSION.localPlayers === 2 ? new HumanController(this, 'arrows') : undefined;
+    this.worldRoot = this.add.container(0, 0).setDepth(0);
     this.tileLayer = this.add.container();
     this.objectLayer = this.add.container();
     this.effectLayer = this.add.container();
+    this.worldRoot.add([this.tileLayer, this.objectLayer, this.effectLayer]);
     this.uiLayer = this.add.container();
     this.tileLayer.setDepth(0);
     this.effectLayer.setDepth(30);
     this.objectLayer.setDepth(20);
     this.uiLayer.setDepth(100);
-    this.animation = new AnimationSystem(this);
+    this.animation = new AnimationSystem(this, this.effectLayer);
     this.explosionFx = new ExplosionSystem(this, this.grid, this.effectLayer);
     this.dragonBlastFx = new DragonBlastVfxSystem(this, this.grid, this.effectLayer);
     this.bombViews = new BombViewSystem(this, this.grid, this.objectLayer, this.explosionFx);
     this.drawArena();
     this.powers.seedInitial(
-      SESSION.mode === 'sandbox' ? 0
+      SESSION.mode === 'sandbox' || SESSION.mode === 'arcade' ? 0
         : SESSION.mode === 'grand' ? 10
           : SESSION.mode === 'classic' ? 5 : 7
     );
     this.spawnActors();
+    this.worldPresentation = new WorldPresentationSystem(this, this.worldRoot, this.grid, this.device);
+    this.worldPresentation.update(this.player, true);
+    if (SESSION.mode === 'arcade') {
+      for (const key of this.blockSprites.keys()) this.arcadeBlockHealth.set(key, 2);
+    }
     this.hud = new HUD(this);
     this.hud.create(modeDef, this.device.compactHud);
     if (SESSION.mode === 'sandbox') {
@@ -163,6 +180,7 @@ export class GameScene extends Phaser.Scene {
     if (this.network.active && this.network.role !== 'host') {
       if (pausePressed) this.sendGuestInput('none', false, false, false, true);
       if (!this.paused) this.updateNetworkGuest(Math.min(delta, 34));
+      this.worldPresentation?.update(this.player);
       return;
     }
     if (pausePressed) this.togglePause();
@@ -171,6 +189,18 @@ export class GameScene extends Phaser.Scene {
     const dt = Math.min(delta, 34);
     this.spawnGraceMs = Math.max(0, this.spawnGraceMs - dt);
     this.tickStatuses(dt);
+    if (SESSION.mode === 'arcade') {
+      this.tickArcade(dt);
+      this.updateHuman(dt);
+      this.updateHuman2(dt);
+      this.updateBots(dt);
+      this.syncSprites();
+      this.worldPresentation?.update(this.player);
+      const result = this.mode.update(dt, this.player, this.actors);
+      this.hud.update(this.player, this.actors.filter((a) => !a.isHuman && a.alive).length, this.mode.elapsedMs);
+      if (result?.done) this.finish(result.won, result.reason);
+      return;
+    }
     this.updateShrine(dt);
     this.updateFrostZones(dt);
     this.resolveChampionSurgeTouches();
@@ -185,6 +215,7 @@ export class GameScene extends Phaser.Scene {
     this.danger.rebuild(this.bombs.bombs, this.bombs.activeBlastTiles());
     this.collectPowerUps();
     this.syncSprites();
+    this.worldPresentation?.update(this.player);
     if (this.network.active && this.network.role === 'host') {
       this.mode.elapsedMs += dt;
       this.hud.update(this.player, this.actors.filter((actor) => actor !== this.player && actor.alive).length, this.mode.elapsedMs);
@@ -730,13 +761,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHuman(dt: number): void {
-    this.touch?.setRemoteAvailable(this.player.stats.remoteArmedBombs);
-    this.touch?.setStoredPowerAvailable(!!this.player.storedPower);
+    this.touch?.setRemoteAvailable(SESSION.mode === 'arcade' ? 0 : this.player.stats.remoteArmedBombs);
+    this.touch?.setStoredPowerAvailable(SESSION.mode === 'arcade' ? false : !!this.player.storedPower);
     const touchDirection = this.touch?.direction() ?? 'none';
     this.moveActor(this.player, touchDirection !== 'none' ? touchDirection : this.human.direction(), dt);
-    if (this.human.consumeBomb() || this.touch?.consumeBomb()) this.placeBomb(this.player);
-    if (this.human.consumeRemote() || this.touch?.consumeRemote()) this.triggerRemote(this.player);
-    if (this.human.consumeSpecial() || this.touch?.consumeSpecial()) this.usePowerOrSpecial(this.player);
+    if (this.human.consumeBomb() || this.touch?.consumeBomb()) {
+      if (SESSION.mode === 'arcade') this.arcadeStrike(this.player);
+      else this.placeBomb(this.player);
+    }
+    if (SESSION.mode !== 'arcade' && (this.human.consumeRemote() || this.touch?.consumeRemote())) this.triggerRemote(this.player);
+    if (this.human.consumeSpecial() || this.touch?.consumeSpecial()) {
+      if (SESSION.mode === 'arcade') this.arcadeSignature(this.player);
+      else this.usePowerOrSpecial(this.player);
+    }
   }
 
   private updateHuman2(dt: number): void {
@@ -744,13 +781,23 @@ export class GameScene extends Phaser.Scene {
     const player2 = this.actors.find((actor) => actor.id === 'player-2');
     if (!player2) return;
     this.moveActor(player2, this.human2.direction(), dt);
-    if (this.human2.consumeBomb()) this.placeBomb(player2);
-    if (this.human2.consumeRemote()) this.triggerRemote(player2);
-    if (this.human2.consumeSpecial()) this.usePowerOrSpecial(player2);
+    if (this.human2.consumeBomb()) {
+      if (SESSION.mode === 'arcade') this.arcadeStrike(player2);
+      else this.placeBomb(player2);
+    }
+    if (SESSION.mode !== 'arcade' && this.human2.consumeRemote()) this.triggerRemote(player2);
+    if (this.human2.consumeSpecial()) {
+      if (SESSION.mode === 'arcade') this.arcadeSignature(player2);
+      else this.usePowerOrSpecial(player2);
+    }
   }
 
   private updateBots(dt: number): void {
-      if (SESSION.mode === 'sandbox') return;
+    if (SESSION.mode === 'sandbox') return;
+    if (SESSION.mode === 'arcade') {
+      this.updateArcadeBots(dt);
+      return;
+    }
     for (const bot of this.actors.filter((a): a is Bot => a instanceof Bot && a.alive)) {
       if (this.spawnGraceMs > 0) continue;
       if (!bot.lastMovementTile) bot.lastMovementTile = { ...bot.grid };
@@ -822,6 +869,207 @@ export class GameScene extends Phaser.Scene {
         bot.thinkMs = 0;
       }
     }
+  }
+
+  private updateArcadeBots(dt: number): void {
+    for (const bot of this.actors.filter((actor): actor is Bot => actor instanceof Bot && actor.alive)) {
+      if (this.spawnGraceMs > 0) continue;
+      bot.thinkMs -= dt;
+      const opponents = this.actors.filter((actor) => actor !== bot && actor.alive);
+      const target = opponents.sort((a, b) => distance(bot.grid, a.grid) - distance(bot.grid, b.grid))[0];
+      const reachedTarget = !!bot.currentIntent.target && sameTile(bot.grid, bot.currentIntent.target);
+      if (bot.thinkMs <= 0 || reachedTarget || bot.currentIntent.dir === 'none') {
+        bot.currentIntent = this.ai.think(bot, opponents, this.grid, this.bombs, this.danger, this.powers);
+        bot.thinkMs = this.ai.reactionDelay();
+      } else if (bot.currentIntent.target) {
+        bot.currentIntent = this.ai.continueIntent(bot, bot.currentIntent, this.grid, this.bombs, this.danger);
+      }
+
+      const weapon = getArcadeWeapon(bot.character);
+      const aligned = target && (target.grid.x === bot.grid.x || target.grid.y === bot.grid.y);
+      if (target && aligned && distance(bot.grid, target.grid) <= weapon.empoweredRange) {
+        this.faceActorToward(bot, target.grid);
+        this.arcadeStrike(bot);
+      } else if (bot.currentIntent.placeBomb) {
+        this.arcadeStrike(bot);
+        bot.currentIntent.placeBomb = false;
+      }
+      if (bot.currentIntent.useSpecial || (target && distance(bot.grid, target.grid) <= 4 && Math.random() < 0.008)) {
+        this.arcadeSignature(bot);
+        bot.currentIntent.useSpecial = false;
+      }
+      this.moveActor(bot, bot.currentIntent.dir, dt);
+    }
+  }
+
+  private tickArcade(dt: number): void {
+    for (const actor of this.actors) {
+      const attack = Math.max(0, (this.arcadeAttackMs.get(actor.id) ?? 0) - dt);
+      const active = Math.max(0, (this.arcadePowerMs.get(actor.id) ?? 0) - dt);
+      this.arcadeAttackMs.set(actor.id, attack);
+      this.arcadePowerMs.set(actor.id, active);
+      actor.arcadePowerMs = active;
+      if (active > 0 && actor.character === 'beast') {
+        const pulse = (this.arcadeCompanionMs.get(actor.id) ?? 0) - dt;
+        if (pulse <= 0) {
+          this.arcadeCompanionMs.set(actor.id, 950);
+          this.arcadeCompanionStrike(actor);
+        } else {
+          this.arcadeCompanionMs.set(actor.id, pulse);
+        }
+      }
+    }
+  }
+
+  private arcadeStrike(actor: Player): void {
+    if (!actor.alive || (this.arcadeAttackMs.get(actor.id) ?? 0) > 0) return;
+    const weapon = getArcadeWeapon(actor.character);
+    const empowered = (this.arcadePowerMs.get(actor.id) ?? 0) > 0;
+    this.arcadeAttackMs.set(actor.id, empowered ? weapon.attackCooldownMs * 0.78 : weapon.attackCooldownMs);
+    const range = empowered ? weapon.empoweredRange : weapon.range;
+    const direction = actor.lastDir.x === 0 && actor.lastDir.y === 0 ? { x: 0, y: 1 } : actor.lastDir;
+    const tiles: GridPosition[] = [];
+    let blocked: GridPosition | undefined;
+    for (let step = 1; step <= range; step += 1) {
+      const tile = { x: actor.grid.x + direction.x * step, y: actor.grid.y + direction.y * step };
+      if (!this.grid.inBounds(tile) || this.grid.get(tile) === 'solid') {
+        blocked = tile;
+        break;
+      }
+      tiles.push(tile);
+      if (this.grid.get(tile) === 'destructible') break;
+    }
+
+    const strikeTiles = [...tiles];
+    if (empowered && (actor.character === 'frost' || actor.character === 'stone') && tiles.length) {
+      const end = tiles[tiles.length - 1];
+      const sideA = { x: end.x + direction.y, y: end.y + direction.x };
+      const sideB = { x: end.x - direction.y, y: end.y - direction.x };
+      if (this.grid.inBounds(sideA) && this.grid.get(sideA) !== 'solid') strikeTiles.push(sideA);
+      if (this.grid.inBounds(sideB) && this.grid.get(sideB) !== 'solid') strikeTiles.push(sideB);
+    }
+
+    const view = this.views.get(actor.id);
+    if (view) this.animation.playPlaceBomb(actor, view);
+    this.renderArcadeStrike(actor, strikeTiles, blocked, empowered);
+    const piercing = empowered && (actor.character === 'raven' || actor.character === 'veil');
+    for (const tile of strikeTiles) {
+      if (this.grid.get(tile) === 'destructible') {
+        this.hitArcadeBlock(tile, actor.id);
+        if (!piercing) break;
+      }
+      const rival = this.actors.find((candidate) => candidate !== actor && candidate.alive && sameTile(candidate.grid, tile));
+      if (rival) {
+        this.damageActor(rival, actor.id);
+        this.floatText(rival.world.x, rival.world.y - 48, weapon.attackName, `#${weapon.highlight.toString(16).padStart(6, '0')}`);
+        if (!piercing) break;
+      }
+    }
+    AudioSystem.get().sfx(actor.character === 'wolf' || actor.character === 'raven' ? 'blink' : actor.character === 'frost' ? 'frost' : 'beast');
+  }
+
+  private arcadeSignature(actor: Player): void {
+    if (!actor.alive || actor.specialCooldownMs > 0) return;
+    const weapon = getArcadeWeapon(actor.character);
+    actor.specialCooldownMs = weapon.signatureCooldownMs;
+    this.arcadePowerMs.set(actor.id, weapon.activeMs);
+    actor.arcadePowerMs = weapon.activeMs;
+    const view = this.views.get(actor.id);
+    if (view) this.animation.playSpecial(actor, view, weapon.color);
+    if (actor.character === 'wolf' || actor.character === 'skin') actor.stats.temporarySpeedBoost = weapon.activeMs;
+    if (actor.character === 'frost' || actor.character === 'stone') {
+      actor.stats.shielded = true;
+      actor.stats.shieldMs = weapon.activeMs;
+    }
+    if (actor.character === 'veil') actor.stats.temporaryGhostMode = Math.min(3000, weapon.activeMs);
+    if (actor.character === 'beast') this.arcadeCompanionMs.set(actor.id, 120);
+    this.floatText(actor.world.x, actor.world.y - 58, `${weapon.signatureName} - ${Math.ceil(weapon.activeMs / 1000)}s`, `#${weapon.highlight.toString(16).padStart(6, '0')}`);
+    this.specialPulse(actor, weapon.color);
+    AudioSystem.get().sfx(actor.character === 'dragon' ? 'surge' : actor.character === 'frost' ? 'frost' : actor.character === 'veil' ? 'ghost' : 'beast');
+  }
+
+  private renderArcadeStrike(actor: Player, tiles: GridPosition[], blocked: GridPosition | undefined, empowered: boolean): void {
+    const weapon = getArcadeWeapon(actor.character);
+    const direction = actor.lastDir;
+    const horizontal = direction.x !== 0;
+    const fx = this.add.container(0, 0).setDepth(34);
+    for (const tile of tiles) {
+      const world = this.grid.toWorld(tile);
+      let mark: Phaser.GameObjects.GameObject;
+      if (weapon.style === 'mace' || weapon.style === 'hammer') {
+        mark = this.add.circle(world.x, world.y, empowered ? 22 : 16, weapon.color, 0.18).setStrokeStyle(empowered ? 4 : 3, weapon.highlight, 0.9);
+      } else if (weapon.style === 'blade' || weapon.style === 'daggers') {
+        mark = this.add.arc(world.x, world.y, empowered ? 24 : 18, 35, 305, false, weapon.color, 0).setStrokeStyle(empowered ? 6 : 4, weapon.highlight, 0.88).setAngle(horizontal ? 0 : 90);
+      } else if (weapon.style === 'lantern') {
+        mark = this.add.star(world.x, world.y, 6, empowered ? 9 : 6, empowered ? 20 : 15, weapon.color, 0.5).setStrokeStyle(2, weapon.highlight, 0.9);
+      } else {
+        mark = this.add.rectangle(world.x, world.y, horizontal ? this.grid.tileSize - 8 : empowered ? 12 : 8, horizontal ? empowered ? 12 : 8 : this.grid.tileSize - 8, weapon.color, 0.52).setStrokeStyle(2, weapon.highlight, 0.86);
+      }
+      fx.add(mark);
+    }
+    if (blocked && this.grid.inBounds(blocked)) {
+      const world = this.grid.toWorld(blocked);
+      fx.add(this.add.circle(world.x, world.y, 9, weapon.highlight, 0.18).setStrokeStyle(3, weapon.highlight, 0.78));
+    }
+    this.effectLayer.add(fx);
+    this.tweens.add({
+      targets: fx,
+      alpha: 0,
+      scale: empowered ? 1.22 : 1.08,
+      duration: empowered ? 320 : 220,
+      ease: 'Cubic.easeOut',
+      onComplete: () => fx.destroy(true)
+    });
+    if (empowered) this.cameras.main.shake(85, 0.0025);
+  }
+
+  private hitArcadeBlock(tile: GridPosition, ownerId: string): void {
+    const key = keyOf(tile);
+    const remaining = (this.arcadeBlockHealth.get(key) ?? 2) - 1;
+    this.arcadeBlockHealth.set(key, remaining);
+    const block = this.blockSprites.get(key);
+    if (!block) return;
+    if (remaining > 0) {
+      this.tweens.add({ targets: block, x: block.x + 3, duration: 45, yoyo: true, repeat: 1 });
+      return;
+    }
+    this.animateBlockBreak(block);
+    this.blockSprites.delete(key);
+    this.arcadeBlockHealth.delete(key);
+    this.grid.set(tile, 'empty');
+    this.emitDebris(tile);
+    const owner = this.actors.find((actor) => actor.id === ownerId);
+    if (owner?.isHuman) this.floatText(owner.world.x, owner.world.y - 44, 'Path opened', '#d8c9aa');
+  }
+
+  private arcadeCompanionStrike(actor: Player): void {
+    const target = this.actors
+      .filter((candidate) => candidate !== actor && candidate.alive)
+      .sort((a, b) => distance(actor.grid, a.grid) - distance(actor.grid, b.grid))[0];
+    if (!target || distance(actor.grid, target.grid) > 5) return;
+    const spirit = this.add.triangle(actor.world.x, actor.world.y - 8, -12, 9, 15, 0, -12, -9, 0x78d46b, 0.82)
+      .setStrokeStyle(2, 0xdcffc7, 0.9)
+      .setDepth(35);
+    this.effectLayer.add(spirit);
+    this.tweens.add({
+      targets: spirit,
+      x: target.world.x,
+      y: target.world.y - 8,
+      duration: 260,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (target.alive && distance(actor.grid, target.grid) <= 5) this.damageActor(target, actor.id);
+        this.specialPulse(target, 0x78d46b);
+        spirit.destroy();
+      }
+    });
+  }
+
+  private faceActorToward(actor: Player, target: GridPosition): void {
+    if (target.x > actor.grid.x) actor.lastDir = { x: 1, y: 0 };
+    else if (target.x < actor.grid.x) actor.lastDir = { x: -1, y: 0 };
+    else if (target.y > actor.grid.y) actor.lastDir = { x: 0, y: 1 };
+    else if (target.y < actor.grid.y) actor.lastDir = { x: 0, y: -1 };
   }
 
   private moveActor(actor: Player, dir: Direction, dt: number): void {
@@ -1322,6 +1570,7 @@ export class GameScene extends Phaser.Scene {
 
   private floatText(x: number, y: number, label: string, color: string): void {
     const text = this.add.text(x, y, label, { fontFamily: 'Georgia', fontSize: '18px', color }).setOrigin(0.5);
+    this.effectLayer.add(text);
     this.tweens.add({ targets: text, y: y - 26, alpha: 0, duration: 900, onComplete: () => text.destroy() });
   }
 
@@ -1337,7 +1586,7 @@ export class GameScene extends Phaser.Scene {
       strokeThickness: 3
     });
     const group = this.add.container(0, 0, [icon, text]);
-    this.uiLayer.add(group);
+    this.effectLayer.add(group);
     this.tweens.add({ targets: group, y: -28, alpha: 0, duration: 1050, onComplete: () => group.destroy() });
   }
 
@@ -1933,11 +2182,17 @@ export class GameScene extends Phaser.Scene {
       fontSize: '16px',
       color: '#f4ead2'
     }).setOrigin(0.5);
-    const controls = this.device.touch
-      ? 'JOYSTICK move   BOMB place rune   POWER special/cast   HEX remote'
-      : 'WASD move   SPACE bomb   SHIFT power/special   E remote';
+    const controls = SESSION.mode === 'arcade'
+      ? this.device.touch
+        ? 'JOYSTICK move   STRIKE weapon   SIGNATURE empower'
+        : 'WASD move   SPACE weapon strike   SHIFT signature'
+      : this.device.touch
+        ? 'JOYSTICK move   BOMB place rune   POWER special/cast   HEX remote'
+        : 'WASD move   SPACE bomb   SHIFT power/special   E remote';
     const hintText = SESSION.mode === 'sandbox'
       ? `Open RUNE LAB to apply any power | practice rival has 20 health\n${this.device.touch ? 'Tap RUNE LAB' : 'T opens lab'}   ${controls}`
+      : SESSION.mode === 'arcade'
+        ? `Open lanes with weapon strikes | signatures empower your kit for 6.5 seconds\n${controls}`
       : `Break blocks | collect runes | control the centre\n${controls}`;
     const hint = this.add.text(640, 326, hintText, {
       fontFamily: 'Arial',
@@ -2036,7 +2291,10 @@ export class GameScene extends Phaser.Scene {
 
   private toggleMute(): void {
     const muted = AudioSystem.get().toggleMute();
-    this.floatText(640, 98, muted ? 'Audio muted' : 'Audio on', '#f7d783');
+    const notice = this.add.text(640, 98, muted ? 'Audio muted' : 'Audio on', {
+      fontFamily: 'Georgia', fontSize: '18px', color: '#f7d783'
+    }).setOrigin(0.5).setDepth(190);
+    this.tweens.add({ targets: notice, y: 72, alpha: 0, duration: 900, onComplete: () => notice.destroy() });
   }
 
   private resetMatchState(): void {
@@ -2069,6 +2327,10 @@ export class GameScene extends Phaser.Scene {
     this.lastNetworkDirection = 'none';
     this.networkStatusText = undefined;
     this.remoteInputs.clear();
+    this.arcadeAttackMs.clear();
+    this.arcadePowerMs.clear();
+    this.arcadeCompanionMs.clear();
+    this.arcadeBlockHealth.clear();
   }
 
   private shutdown(): void {
@@ -2076,6 +2338,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-R', this.restartTrial, this);
     this.input.keyboard?.off('keydown-Q', this.returnToMainMenu, this);
     this.bombViews?.cleanup();
+    this.worldPresentation?.destroy();
     this.tweens.killAll();
     this.input.keyboard?.removeAllListeners();
     this.network.removeEventListener('game', this.onNetworkGame);

@@ -59,7 +59,10 @@ export interface ActorVisual {
 }
 
 export class AnimationSystem {
-  constructor(private readonly scene: Phaser.Scene) {}
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly worldEffects?: Phaser.GameObjects.Container
+  ) {}
 
   createActorVisual(actor: Player): ActorVisual {
     const character = getCharacter(actor.character);
@@ -223,6 +226,7 @@ export class AnimationSystem {
     for (let i = 0; i < count; i += 1) {
       const angle = (Math.PI * 2 * i) / count;
       const dot = this.scene.add.circle(actor.world.x, actor.world.y - 8, Phaser.Math.Between(2, 4), color, 0.86);
+      this.worldEffects?.add(dot);
       dot.setDepth(42);
       this.scene.tweens.add({
         targets: dot,
@@ -239,6 +243,7 @@ export class AnimationSystem {
   shieldBreak(actor: Player): void {
     for (let i = 0; i < 14; i += 1) {
       const shard = this.scene.add.rectangle(actor.world.x, actor.world.y - 2, 5, 9, 0xf7d783, 0.9).setAngle(Phaser.Math.Between(0, 180));
+      this.worldEffects?.add(shard);
       shard.setDepth(42);
       this.scene.tweens.add({
         targets: shard,
@@ -362,6 +367,7 @@ export class AnimationSystem {
       const pad = this.scene.add.circle(x, y + 18, 5, 0x9ec8ff, 0.7).setDepth(19);
       const toeA = this.scene.add.circle(x - 5, y + 13, 2, 0xd8eeff, 0.7).setDepth(19);
       const toeB = this.scene.add.circle(x + 5, y + 13, 2, 0xd8eeff, 0.7).setDepth(19);
+      this.worldEffects?.add([pad, toeA, toeB]);
       this.scene.tweens.add({
         targets: [pad, toeA, toeB],
         alpha: 0,
@@ -382,6 +388,7 @@ export class AnimationSystem {
       const slashB = this.scene.add.rectangle(x + 8, y + 17, 14, 2, 0x71516f, 0.52)
         .setAngle(16)
         .setDepth(19);
+      this.worldEffects?.add([slashA, slashB]);
       this.scene.tweens.add({
         targets: [slashA, slashB],
         x: `-=${actor.lastDir.x * 18}`,
@@ -412,6 +419,7 @@ export class AnimationSystem {
     } else {
       particle = this.scene.add.circle(x, y, Phaser.Math.Between(2, 4), color, character === 'veil' ? 0.48 : 0.72);
     }
+    this.worldEffects?.add(particle);
     particle.setDepth(35);
     return particle;
   }
