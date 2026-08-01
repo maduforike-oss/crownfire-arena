@@ -68,6 +68,10 @@ export class ModeSelectScene extends Phaser.Scene {
         ? `ROOM ${network.room}  |  open seats become arena bots`
         : SESSION.mode === 'sandbox'
         ? 'Sandbox uses one champion and a resilient practice rival.'
+        : SESSION.mode === 'arcade'
+          ? SESSION.localPlayers === 2
+            ? 'P2  Arrows | Enter primary | P secondary | Right Shift signature'
+            : 'P1  WASD | Space primary | E secondary | Shift signature'
         : SESSION.localPlayers === 2
           ? 'P2  Arrows | Enter | Right Shift | P'
           : 'P1  WASD | Space | Shift | E',

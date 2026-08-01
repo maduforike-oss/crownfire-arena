@@ -57,6 +57,8 @@ fallback but is no longer the primary menu flow.
 - Phone/iPad: draggable virtual joystick plus Bomb, Power, Hex, and Pause controls. `HEX` only appears while a Remote Hex bomb is armed.
 - Bluetooth remote/gamepad: use **Controller Setup** on the title screen to view incoming iPad browser events and bind every action
 
+**Arms of the Crown (Arcade):** `Space` uses the one-tile primary, `E` uses the champion-specific secondary, and `Shift` uses the telegraphed signature. Touch replaces those keys with Strike, Secondary, and Signature buttons in the exterior control rail.
+
 ## Play on iPad
 
 Open the GitHub Pages URL in Safari, rotate to landscape, and use **Share > Add to Home Screen** for a full-screen app icon. Touch controls appear automatically on touch devices.
@@ -89,6 +91,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds and publishes every 
 - Champion Surge has an explicit 4.5% rune roll, activates on pickup, and grants nine seconds of blast immunity plus contact pressure
 - Eight selectable champions with large showcase portraits, stable layered animation, and themed special abilities
 - Classic Trial, Crown Shard Hunt, four-seat Rumble, and pressure-free Rune Sandbox modes
+- Arms of the Crown weapon mode with a dedicated 19x15 Armory, validated internal spawns, one-tile primaries, and distinct primary/secondary/signature kits for all eight champions
 - Legacy two-player same-WiFi relay retained for local development
 - Four original maps: Ashen Courtyard, Moonfang Ruins, Frost Crown Keep, Hollowmoon Sanctuary
 - Image-led Arena Select cards using the original kingdom vistas and arena concept paintings

@@ -25,11 +25,13 @@ export function generateMapTiles(map: MapDef): GeneratedMap {
   const shrine = { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
   if (tiles.get(keyOf(shrine)) !== 'solid') tiles.set(keyOf(shrine), 'empty');
   enforceEscapePaths(map, tiles, reserved);
+  if (map.layout === 'arcade') carveArcadeLanes(map, tiles);
   return { tiles, reserved };
 }
 
 function enforceEscapePaths(map: MapDef, tiles: Map<string, TileType>, reserved: Set<string>): void {
   for (const spawn of map.spawns) {
+    tiles.set(keyOf(spawn), 'empty');
     const inwardX = spawn.x < map.width / 2 ? 1 : -1;
     const inwardY = spawn.y < map.height / 2 ? 1 : -1;
     const paths: GridPosition[] = [
@@ -41,6 +43,23 @@ function enforceEscapePaths(map: MapDef, tiles: Map<string, TileType>, reserved:
     for (const pos of paths) {
       const key = keyOf(pos);
       if (reserved.has(key) || tiles.get(key) === 'destructible') tiles.set(key, 'empty');
+    }
+  }
+}
+
+function carveArcadeLanes(map: MapDef, tiles: Map<string, TileType>): void {
+  const center = { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
+  tiles.set(keyOf(center), 'empty');
+  for (const spawn of map.spawns) {
+    // A deterministic L-shaped route gives every seat access to the central
+    // fight while leaving the remaining pillars and breakables meaningful.
+    const stepX = spawn.x <= center.x ? 1 : -1;
+    const stepY = spawn.y <= center.y ? 1 : -1;
+    for (let x = spawn.x; x !== center.x + stepX; x += stepX) {
+      tiles.set(keyOf({ x, y: spawn.y }), 'empty');
+    }
+    for (let y = spawn.y; y !== center.y + stepY; y += stepY) {
+      tiles.set(keyOf({ x: center.x, y }), 'empty');
     }
   }
 }

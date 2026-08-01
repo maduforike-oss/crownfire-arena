@@ -73,7 +73,7 @@ export class HUD {
     this.activePanel = this.scene.add.container(1150, 220);
     this.scene.add.text(1150, 580, 'CONTROLS', { fontFamily: 'Arial', fontStyle: 'bold', fontSize: '11px', color: '#d8a84e' }).setOrigin(0.5);
     this.scene.add.text(1150, 625, mode.id === 'arcade'
-      ? 'WASD  Move\nSPACE  Weapon strike\nSHIFT  Signature'
+      ? 'WASD  Move\nSPACE  Primary\nE  Secondary\nSHIFT  Signature'
       : 'WASD  Move\nSPACE  Rune bomb\nSHIFT  Special\nE  Remote hex (armed)', {
       fontFamily: 'Arial', fontSize: '13px', color: '#bdb4a5', align: 'left', lineSpacing: 7
     }).setOrigin(0.5);
@@ -137,8 +137,8 @@ export class HUD {
     this.health.setText(`${'\u2665'.repeat(Math.max(0, player.stats.health))}${'\u2661'.repeat(Math.max(0, player.stats.maxHealth - player.stats.health))}`);
     this.stats.setText(arcadeWeapon
       ? this.compact
-        ? `${arcadeWeapon.style.toUpperCase()}  R${player.arcadePowerMs > 0 ? arcadeWeapon.empoweredRange : arcadeWeapon.range}`
-        : `${arcadeWeapon.name.toUpperCase()}\nRANGE  ${player.arcadePowerMs > 0 ? arcadeWeapon.empoweredRange : arcadeWeapon.range}`
+        ? `${arcadeWeapon.style.toUpperCase()}  P1  S${arcadeWeapon.secondaryRange}`
+        : `${arcadeWeapon.name.toUpperCase()}\nPRIMARY  1 TILE  |  SECONDARY  ${arcadeWeapon.secondaryRange}`
       : this.compact
         ? `BOMB ${player.stats.activeBombs}/${player.stats.maxBombs}  R${player.stats.blastRadius}`
         : `BOMBS  ${player.stats.activeBombs}/${player.stats.maxBombs}\nBLAST RADIUS  ${player.stats.blastRadius}`);
@@ -165,7 +165,9 @@ export class HUD {
     this.specialBar.setFillStyle(arcadeWeapon?.color ?? storedPower?.color ?? (cooldown > 0 ? 0x6d4b88 : character.accentColor));
     this.specialHint.setText(
       arcadeWeapon
-        ? this.compact ? arcadeWeapon.attackName.toUpperCase() : `${arcadeWeapon.attackName.toUpperCase()}  |  ${Math.ceil(arcadeWeapon.activeMs / 1000)}s EMPOWER`
+        ? this.compact
+          ? `${arcadeWeapon.attackName.toUpperCase()} / ${arcadeWeapon.secondaryName.toUpperCase()}${player.arcadeSecondaryCooldownMs > 0 ? ` ${Math.ceil(player.arcadeSecondaryCooldownMs / 1000)}s` : ''}`
+          : `${arcadeWeapon.attackName.toUpperCase()}  |  E: ${arcadeWeapon.secondaryName.toUpperCase()}${player.arcadeSecondaryCooldownMs > 0 ? ` ${Math.ceil(player.arcadeSecondaryCooldownMs / 1000)}s` : ' READY'}`
         : storedPower
         ? this.compact ? 'POWER TO RELEASE' : 'POWER / SHIFT TO RELEASE'
         : player.character === 'dragon'

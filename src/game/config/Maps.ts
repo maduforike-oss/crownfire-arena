@@ -13,6 +13,7 @@ export interface MapDef {
   block: number;
   glow: number;
   accent: 'ember' | 'moon' | 'frost' | 'veil';
+  layout?: 'standard' | 'grand' | 'arcade';
   spawns: GridPosition[];
 }
 
@@ -101,11 +102,34 @@ export function makeExpandedMap(map: MapDef): MapDef {
     height: 15,
     tileSize: 40,
     destructibleDensity: 48,
+    layout: 'grand',
     spawns: [
       { x: 1, y: 1 },
       { x: 17, y: 13 },
       { x: 17, y: 1 },
       { x: 1, y: 13 }
+    ]
+  };
+}
+
+export function makeArcadeMap(map: MapDef): MapDef {
+  return {
+    ...map,
+    id: map.id,
+    name: `${map.name} Armory`,
+    theme: `${map.theme}; dedicated weapon-combat grounds`,
+    width: 19,
+    height: 15,
+    tileSize: 40,
+    destructibleDensity: 38,
+    layout: 'arcade',
+    // Arcade fighters begin well inside the boundary so their two-tile art,
+    // contact shadows and action tells never enter from outside the arena.
+    spawns: [
+      { x: 3, y: 3 },
+      { x: 15, y: 11 },
+      { x: 15, y: 3 },
+      { x: 3, y: 11 }
     ]
   };
 }
