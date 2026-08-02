@@ -13,6 +13,10 @@ import {
   type ChampionAnimationState
 } from '../config/ChampionAnimations';
 import { getDragonArcadeFrames, type DragonArcadeFrame } from '../config/DragonArcadeAnimations';
+import {
+  getVeilActionFrames,
+  type VeilActionFrame
+} from '../config/VeilActionAnimations';
 
 interface MotionProfile {
   idleBob: number;
@@ -40,6 +44,7 @@ export interface ActorVisual {
   label: Phaser.GameObjects.Text;
   health: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
+  actionVfx: Phaser.GameObjects.Image;
   aura: Phaser.GameObjects.Arc;
   buffAura: Phaser.GameObjects.Arc;
   shieldAura: Phaser.GameObjects.Arc;
@@ -59,6 +64,7 @@ export interface ActorVisual {
   settleUntil: number;
   actionFacing: Exclude<Direction, 'none'>;
   arcadeFrames?: readonly DragonArcadeFrame[];
+  veilActionFrames?: readonly VeilActionFrame[];
   arcadeAnimationStartedAt: number;
 }
 
@@ -87,7 +93,11 @@ export class AnimationSystem {
     const sprite = this.scene.add.image(0, spriteBaseY, texture)
       .setOrigin(animation.anchorX, animation.artBaseline)
       .setDisplaySize(spriteDisplaySize, spriteDisplaySize);
-    const motion = this.scene.add.container(0, -13, [sprite]);
+    const actionVfx = this.scene.add.image(0, spriteBaseY, texture)
+      .setOrigin(animation.anchorX, animation.artBaseline)
+      .setDisplaySize(spriteDisplaySize, spriteDisplaySize)
+      .setVisible(false);
+    const motion = this.scene.add.container(0, -13, [sprite, actionVfx]);
     const label = this.scene.add.text(0, 52, actor.isHuman ? 'YOU' : actor.name.split(' ')[0], {
       fontFamily: 'Georgia',
       fontSize: actor.isHuman ? '13px' : '11px',
@@ -105,6 +115,7 @@ export class AnimationSystem {
       label,
       health,
       sprite,
+      actionVfx,
       aura,
       buffAura,
       shieldAura,
@@ -132,6 +143,10 @@ export class AnimationSystem {
     const actionActive = now < visual.actionUntil;
     if (visual.actionWasActive && !actionActive && actor.alive) {
       visual.settleUntil = now + 120;
+      visual.actionFacing = 'down';
+      visual.arcadeFrames = undefined;
+      visual.veilActionFrames = undefined;
+      visual.actionVfx.setVisible(false);
     }
     visual.actionWasActive = actionActive;
     const state = !actor.alive
@@ -178,6 +193,7 @@ export class AnimationSystem {
   }
 
   playPlaceBomb(actor: Player, visual: ActorVisual): void {
+    this.clearAuthoredAction(visual);
     visual.actionFacing = 'down';
     visual.state = 'place_bomb';
     visual.animationStartedAt = this.scene.time.now;
@@ -189,6 +205,7 @@ export class AnimationSystem {
   }
 
   playSpecial(actor: Player, visual: ActorVisual, color: number): void {
+    this.clearAuthoredAction(visual);
     visual.actionFacing = 'down';
     visual.buffAura.setStrokeStyle(4, color, 0.95).setFillStyle(color, 0.12).setScale(0.75).setAlpha(1);
     this.scene.tweens.add({
@@ -226,6 +243,10 @@ export class AnimationSystem {
     visual.arcadeFrames = actor.character === 'dragon' && kind !== 'secondary'
       ? getDragonArcadeFrames(kind, facing)
       : undefined;
+    visual.veilActionFrames = actor.character === 'veil'
+      ? getVeilActionFrames(kind, facing, windupMs, recoveryMs)
+      : undefined;
+    visual.actionVfx.setVisible(false);
     visual.arcadeAnimationStartedAt = this.scene.time.now;
     visual.state = 'special';
     visual.animationStartedAt = this.scene.time.now;
@@ -275,7 +296,36 @@ export class AnimationSystem {
     });
   }
 
+  playVeilGhostVeil(
+    actor: Player,
+    visual: ActorVisual,
+    facing: Exclude<Direction, 'none'>,
+    color: number
+  ): void {
+    const durationMs = animationDurationMs(actor.character, 'special');
+    const windupMs = Math.round(durationMs * 0.32);
+    const recoveryMs = Math.max(1, Math.round(durationMs - windupMs));
+    visual.actionFacing = facing;
+    visual.arcadeFrames = undefined;
+    visual.veilActionFrames = getVeilActionFrames('signature', facing, windupMs, recoveryMs);
+    visual.arcadeAnimationStartedAt = this.scene.time.now;
+    visual.state = 'special';
+    visual.animationStartedAt = this.scene.time.now;
+    visual.actionUntil = this.scene.time.now + windupMs + recoveryMs;
+    visual.actionWasActive = true;
+    visual.settleUntil = 0;
+    visual.buffAura.setStrokeStyle(4, color, 0.95).setFillStyle(color, 0.12).setScale(0.75).setAlpha(1);
+    this.scene.tweens.add({
+      targets: visual.buffAura,
+      scale: 1.75,
+      alpha: 0,
+      duration: 520,
+      ease: 'Cubic.easeOut'
+    });
+  }
+
   playDamaged(actor: Player, visual: ActorVisual): void {
+    this.clearAuthoredAction(visual);
     visual.state = 'damaged';
     visual.damageFlashUntil = this.scene.time.now + 320;
     visual.animationStartedAt = this.scene.time.now;
@@ -287,6 +337,7 @@ export class AnimationSystem {
   }
 
   playDefeated(actor: Player, visual: ActorVisual): void {
+    this.clearAuthoredAction(visual);
     visual.state = 'defeated';
     visual.animationStartedAt = this.scene.time.now;
     visual.actionUntil = Number.POSITIVE_INFINITY;
@@ -344,10 +395,14 @@ export class AnimationSystem {
     this.scene.tweens.killTweensOf(visual.motion);
     visual.motion.setScale(1).setAngle(0).setPosition(0, -13);
     visual.animationStartedAt = this.scene.time.now;
-    if (state !== 'special') visual.arcadeFrames = undefined;
+    if (state !== 'special') this.clearAuthoredAction(visual);
   }
 
   private updateAnimationPose(actor: Player, visual: ActorVisual): void {
+    if (visual.veilActionFrames && this.scene.time.now < visual.actionUntil) {
+      this.updateVeilActionPose(visual);
+      return;
+    }
     if (visual.arcadeFrames && this.scene.time.now < visual.actionUntil) {
       this.updateDragonArcadePose(visual);
       return;
@@ -402,6 +457,50 @@ export class AnimationSystem {
       .setDisplaySize(128, 128)
       .setFlipX(false)
       .setAlpha(1);
+  }
+
+  private updateVeilActionPose(visual: ActorVisual): void {
+    const frames = visual.veilActionFrames;
+    if (!frames?.length) return;
+    const elapsed = Math.max(0, this.scene.time.now - visual.arcadeAnimationStartedAt);
+    let frameIndex = frames.length - 1;
+    let boundary = 0;
+    for (let index = 0; index < frames.length; index += 1) {
+      boundary += frames[index].durationMs;
+      if (elapsed < boundary) {
+        frameIndex = index;
+        break;
+      }
+    }
+    const frame = frames[frameIndex];
+    if (visual.sprite.texture.key !== frame.bodyTextureKey || visual.sprite.frame.name !== String(frame.bodyFrame)) {
+      visual.sprite.setTexture(frame.bodyTextureKey, frame.bodyFrame);
+    }
+    if (visual.actionVfx.texture.key !== frame.vfxTextureKey || visual.actionVfx.frame.name !== String(frame.vfxFrame)) {
+      visual.actionVfx.setTexture(frame.vfxTextureKey, frame.vfxFrame);
+    }
+    visual.poseFrame = frameIndex;
+    visual.sprite
+      .setOrigin(0.5, 0.875)
+      .setPosition(0, visual.spriteBaseY)
+      .setAngle(0)
+      .setDisplaySize(128, 128)
+      .setFlipX(false)
+      .setAlpha(1);
+    visual.actionVfx
+      .setVisible(true)
+      .setOrigin(0.5, 0.875)
+      .setPosition(0, visual.spriteBaseY)
+      .setAngle(0)
+      .setDisplaySize(128, 128)
+      .setFlipX(false)
+      .setAlpha(1);
+  }
+
+  private clearAuthoredAction(visual: ActorVisual): void {
+    visual.arcadeFrames = undefined;
+    visual.veilActionFrames = undefined;
+    visual.actionVfx.setVisible(false);
   }
 
   private presentationFacing(visual: ActorVisual): Exclude<Direction, 'none'> {

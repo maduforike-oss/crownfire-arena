@@ -42,6 +42,7 @@ import { applyBotProfile, buildBotRoster } from '../config/BotProfiles';
 import { getArcadeWeapon, type ArcadeWeaponDef } from '../config/ArcadeWeapons';
 import { WorldPresentationSystem } from '../systems/WorldPresentationSystem';
 import { resolveArcadeSpawns } from '../systems/ArcadeSpawnSystem';
+import { VeilActionVfxSystem } from '../systems/VeilActionVfxSystem';
 
 interface MirrorDecoy {
   ownerId: string;
@@ -63,6 +64,7 @@ export class GameScene extends Phaser.Scene {
   private animation!: AnimationSystem;
   private explosionFx!: ExplosionSystem;
   private dragonBlastFx!: DragonBlastVfxSystem;
+  private veilActionFx!: VeilActionVfxSystem;
   private bombViews!: BombViewSystem;
   private hud!: HUD;
   private player!: Player;
@@ -163,6 +165,7 @@ export class GameScene extends Phaser.Scene {
     this.animation = new AnimationSystem(this, this.effectLayer);
     this.explosionFx = new ExplosionSystem(this, this.grid, this.effectLayer);
     this.dragonBlastFx = new DragonBlastVfxSystem(this, this.grid, this.effectLayer);
+    this.veilActionFx = new VeilActionVfxSystem(this, this.grid, this.effectLayer);
     this.bombViews = new BombViewSystem(this, this.grid, this.objectLayer, this.explosionFx);
     this.drawArena();
     this.powers.seedInitial(
@@ -959,6 +962,9 @@ export class GameScene extends Phaser.Scene {
     const weapon = getArcadeWeapon(actor.character);
     this.arcadeAttackMs.set(actor.id, weapon.attackCooldownMs);
     const { tiles, blocked } = this.arcadeLine(actor, 1);
+    if (actor.character === 'veil' && tiles[0]) {
+      this.veilActionFx.cast(actor, 'primary', tiles[0], weapon.primaryWindupMs);
+    }
     this.beginArcadeAction(actor, weapon, 'primary', () => {
       this.renderArcadeTiles(actor, tiles, 'impact', 220, blocked);
       this.resolveArcadeHits(actor, tiles, weapon.attackName, weapon.highlight);
@@ -1011,6 +1017,7 @@ export class GameScene extends Phaser.Scene {
       });
     } else if (actor.character === 'veil') {
       const line = this.arcadeLine(actor, 1);
+      if (line.tiles[0]) this.veilActionFx.cast(actor, 'secondary', line.tiles[0], weapon.secondaryWindupMs);
       this.beginArcadeAction(actor, weapon, 'secondary', () => this.placeWispSeal(actor, line.tiles[0]));
     } else if (actor.character === 'skin') {
       const landing = this.findArcadeSidestep(actor);
@@ -1073,6 +1080,7 @@ export class GameScene extends Phaser.Scene {
         this.frostActivation(actor, true);
       });
     } else if (actor.character === 'veil') {
+      this.veilActionFx.cast(actor, 'signature', actor.grid, weapon.signatureWindupMs);
       this.beginArcadeAction(actor, weapon, 'signature', () => {
         actor.stats.temporaryGhostMode = weapon.activeMs;
         this.specialPulse(actor, weapon.color);
@@ -1859,7 +1867,8 @@ export class GameScene extends Phaser.Scene {
       actor.stats.temporaryGhostMode = 3000;
       this.floatText(actor.world.x, actor.world.y - 50, 'Ghost Veil', '#d9b8ff');
       this.specialPulse(actor, 0xd9b8ff);
-      if (view) this.animation.playSpecial(actor, view, 0xd9b8ff);
+      this.veilActionFx.cast(actor, 'signature', actor.grid, 210);
+      if (view) this.animation.playVeilGhostVeil(actor, view, this.arcadeFacingDirection(actor), 0xd9b8ff);
       AudioSystem.get().sfx('ghost');
     } else if (actor.character === 'skin') {
       actor.specialCooldownMs = 10000;
@@ -1947,7 +1956,12 @@ export class GameScene extends Phaser.Scene {
     const color = def.color;
     const view = this.views.get(actor.id);
     this.animation.emitPickupBurst(actor, color, type === 'crownSurge' ? 22 : 14);
-    if (view) this.animation.playSpecial(actor, view, color);
+    if (actor.character === 'veil' && type === 'ghostVeil') {
+      this.veilActionFx.cast(actor, 'signature', actor.grid, 210);
+      if (view) this.animation.playVeilGhostVeil(actor, view, this.arcadeFacingDirection(actor), color);
+    } else if (view) {
+      this.animation.playSpecial(actor, view, color);
+    }
     this.specialPulse(actor, color);
     if (type === 'twin') this.orbitRunes(actor, color);
     if (type === 'remoteHex' && actor.isHuman) {

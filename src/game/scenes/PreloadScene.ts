@@ -6,6 +6,7 @@ import { MAPS } from '../config/Maps';
 import { BOMB_VISUAL_THEMES } from '../config/BombVisualThemes';
 import { getMapTheme } from '../config/MapThemes';
 import { DRAGON_ARCADE_FRAME_ASSETS } from '../config/DragonArcadeAnimations';
+import { VEIL_ACTION_ASSETS } from '../config/VeilActionAnimations';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -55,6 +56,10 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(animation.directional.up.textureKey, animation.directional.up.path);
     }
     for (const frame of DRAGON_ARCADE_FRAME_ASSETS) this.load.image(frame.textureKey, frame.path);
+    for (const action of VEIL_ACTION_ASSETS) {
+      this.load.spritesheet(action.bodyTextureKey, action.bodyPath, { frameWidth: 256, frameHeight: 256 });
+      this.load.spritesheet(action.vfxTextureKey, action.vfxPath, { frameWidth: 256, frameHeight: 256 });
+    }
     for (const power of POWER_UPS) {
       if (power.iconPath) this.load.image(power.assetKey, power.iconPath);
     }
@@ -109,6 +114,13 @@ export class PreloadScene extends Phaser.Scene {
     for (const frame of DRAGON_ARCADE_FRAME_ASSETS) {
       if (this.textures.exists(frame.textureKey)) {
         this.textures.get(frame.textureKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+    }
+    for (const action of VEIL_ACTION_ASSETS) {
+      for (const textureKey of [action.bodyTextureKey, action.vfxTextureKey]) {
+        if (this.textures.exists(textureKey)) {
+          this.textures.get(textureKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
       }
     }
   }
